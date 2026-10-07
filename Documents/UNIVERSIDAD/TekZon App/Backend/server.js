@@ -1,6 +1,6 @@
 /**
  * ==========================================================================
- * SERVIDOR PRINCIPAL (SERVER.JS) - TEKZON C.A.
+ * SERVIDOR PRINCIPAL - TEKZON C.A.
  * ==========================================================================
  * Inicializa la aplicación Express, configura los middlewares globales 
  * y enlaza las rutas del API RESTful con la base de datos.
@@ -21,13 +21,13 @@ app.use(cors()); // Permite peticiones cruzadas desde el frontend en Vue.js
 app.use(express.json()); // Habilita la lectura de payloads en formato JSON
 
 // Registro de Rutas del Módulo CRUD (Inventario / Productos)
-app.use('/api/producto', productoRoutes);
+app.use('/api/productos', productoRoutes);
 
 // Ruta base de comprobación de estado del servidor
 app.get('/', (req, res) => {
   res.status(200).json({ 
     empresa: 'TekZon C.A.',
-    estado: 'Servidor operativo y conectado a base de datos relacional 🚀' 
+    estado: 'Servidor operativo y conectado a base de datos relacional' 
   });
 });
 

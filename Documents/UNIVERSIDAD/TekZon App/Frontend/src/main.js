@@ -13,7 +13,7 @@ import 'bootstrap/dist/js/bootstrap.bundle.min.js';
 import 'bootstrap-icons/font/bootstrap-icons.css';
 
 // 3. Importación de la hoja de estilos global exacta (variables y clases de TekZon)
-import './assets/style.css';
+import './assets/styles.css';
 
 // 4. Inicialización y montaje en el DOM
 createApp(App).mount('#app');

@@ -1,11 +1,9 @@
 <script setup>
-/**
- * ==========================================================================
- * VISTA DE INVENTARIO Y CRUD - TEKZON C.A.
- * ==========================================================================
- */
 import { ref, computed, onMounted } from 'vue';
 import ModalProducto from '../components/ProductoModal.vue';
+import EliminarProductoModal from '../components/EliminarProductoModal.vue';
+import ToastNotificaciones from '../components/ToastNotificaciones.vue';
+import ProductoServices from '../services/ProductoServices.js';
 
 // Estados reactivos principales
 const productos = ref([]);
@@ -16,50 +14,89 @@ const filtroEstado = ref('');
 
 // Estados de la interfaz obligatorios
 const estadoCarga = ref(false);
-const mensajeError = ref(null);
-const mensajeExito = ref(null);
-
-// Estado para el modal de creación/edición
 const productoActual = ref(null);
+const productoAEliminar = ref(null);
 const esEdicion = ref(false);
 const procesandoGuardado = ref(false);
+const procesandoEliminacion = ref(false);
 
-// Consumo asíncrono desde el backend (Node.js/Express)
+// Sistema de Notificaciones Toasts dinámicas
+const notificaciones = ref([]);
+
+const mostrarToast = (titulo, mensaje, tipo = 'success') => {
+  const id = Date.now();
+  notificaciones.value.push({ id, titulo, mensaje, tipo });
+  setTimeout(() => {
+    notificaciones.value = notificaciones.value.filter(t => t.id !== id);
+  }, 4000);
+};
+
+const cerrarToastPorId = (id) => {
+  notificaciones.value = notificaciones.value.filter(t => t.id !== id);
+};
+
+// Funciones de lectura adaptadas (DTO / Resilientes)
+const getCodigo = (p) => p.codigo || p.cod_producto || 'Sin código';
+const getNombre = (p) => p.nombre || p.nombre_producto || 'Sin nombre';
+const getCosto = (p) => Number(p.costo || p.precio_costo || 0);
+const getPrecio = (p) => Number(p.precio || p.precio_venta || 0);
+const getStock = (p) => Number(p.stock || p.existencia || 0);
+const getMinimo = (p) => Number(p.minimo || p.stock_minimo || 0);
+const getCategoria = (p) => p.categoria || p.id_categoria || 'General';
+
+// Consumo asíncrono desde el backend
 const cargarInventario = async () => {
   estadoCarga.value = true;
-  mensajeError.value = null;
   try {
-    const respuesta = await fetch('http://localhost:3000/api/productos');
-    if (!respuesta.ok) throw new Error(`Error del servidor: ${respuesta.status}`);
-    productos.value = await respuesta.json();
+    const data = await ProductoServices.listarProductos();
+    productos.value = Array.isArray(data) ? data : (data.data || []);
   } catch (error) {
     console.error("Fallo de conexión:", error);
-    mensajeError.value = "No se pudo conectar con el servidor para obtener el inventario.";
+    mostrarToast("Error de conexión", "No se pudo conectar con el servidor.", "error");
   } finally {
     estadoCarga.value = false;
   }
 };
 
 const obtenerEstadoStock = (p) => {
-  if (p.stock <= 0) return { key: 'agotado', etiqueta: 'Agotado', clase: 'badge-out' };
-  if (p.stock <= p.minimo) return { key: 'bajo', etiqueta: 'Stock bajo', clase: 'badge-low' };
+  const stock = getStock(p);
+  const minimo = getMinimo(p);
+  if (stock <= 0) return { key: 'agotado', etiqueta: 'Agotado', clase: 'badge-out' };
+  if (stock <= minimo) return { key: 'bajo', etiqueta: 'Stock bajo', clase: 'badge-low' };
   return { key: 'disponible', etiqueta: 'Disponible', clase: 'badge-ok' };
 };
 
 const productosFiltrados = computed(() => {
   return productos.value.filter(p => {
-    const coincideTexto = !textoBusqueda.value || [p.nombre, p.codigo, p.marca].some(v => v.toLowerCase().includes(textoBusqueda.value.toLowerCase()));
-    const coincideCat = !filtroCategoria.value || p.categoria === filtroCategoria.value;
+    const texto = textoBusqueda.value.toLowerCase();
+    const coincideTexto = !texto || 
+      getNombre(p).toLowerCase().includes(texto) || 
+      getCodigo(p).toLowerCase().includes(texto) || 
+      (p.marca && p.marca.toLowerCase().includes(texto));
+    
+    const coincideCat = !filtroCategoria.value || getCategoria(p) == filtroCategoria.value;
     const coincideEstado = !filtroEstado.value || obtenerEstadoStock(p).key === filtroEstado.value;
     return coincideTexto && coincideCat && coincideEstado;
   });
 });
 
 const totalArticulos = computed(() => productos.value.length);
-const totalValorCosto = computed(() => productos.value.reduce((s, p) => s + (p.costo * p.stock), 0));
+const totalValorCosto = computed(() => productos.value.reduce((s, p) => s + (getCosto(p) * getStock(p)), 0));
 
 const prepararCreacion = () => {
-  productoActual.value = null;
+  // Limpiamos el objeto para que el formulario nazca completamente en blanco
+  productoActual.value = {
+    codigo: '',
+    nombre: '',
+    categoria: '',
+    marca: '',
+    costo: 0,
+    precio: 0,
+    stock: 0,
+    minimo: 0,
+    imagen: '',
+    descripcion: ''
+  };
   esEdicion.value = false;
 };
 
@@ -68,37 +105,95 @@ const prepararEdicion = (producto) => {
   esEdicion.value = true;
 };
 
+const prepararEliminacion = (producto) => {
+  productoAEliminar.value = producto;
+};
+
+// Guardar o Actualizar producto con cierre automático de modal
 const guardarDatosProducto = async (datosFormulario) => {
   procesandoGuardado.value = true;
-  mensajeError.value = null;
   try {
-    const url = esEdicion.value 
-      ? `http://localhost:3000/api/productos/${datosFormulario.codigo}` 
-      : 'http://localhost:3000/api/productos';
-    const metodo = esEdicion.value ? 'PUT' : 'POST';
-
-    const respuesta = await fetch(url, {
-      method: metodo,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(datosFormulario)
-    });
-
-    if (!respuesta.ok) throw new Error("No se pudo procesar la solicitud en el servidor.");
-
-    await cargarInventario();
-    mensajeExito.value = esEdicion.value ? "¡Producto actualizado exitosamente!" : "¡Producto registrado exitosamente!";
+    if (esEdicion.value) {
+      await ProductoServices.actualizarProducto(datosFormulario.codigo, datosFormulario);
+      mostrarToast("¡Actualizado!", "El registro fue modificado con éxito.", "success");
+    } else {
+      await ProductoServices.crearProducto(datosFormulario);
+      mostrarToast("¡Registrado!", "El nuevo producto fue guardado con éxito.", "success");
+    }
     
+    await cargarInventario();
+    
+    // Cierre automático seguro del modal principal
     const modalEl = document.getElementById('productModal');
-    const modalInstance = bootstrap.Modal.getInstance(modalEl);
-    if (modalInstance) modalInstance.hide();
-
-    setTimeout(() => { mensajeExito.value = null; }, 4000);
+    if (modalEl) {
+      if (window.bootstrap && window.bootstrap.Modal) {
+        const modalInstance = window.bootstrap.Modal.getInstance(modalEl) || window.bootstrap.Modal.getOrCreateInstance(modalEl);
+        modalInstance.hide();
+      }
+      
+      // Respaldo manual para asegurar que se quite el fondo gris (backdrop) y se recupere el scroll
+      document.body.classList.remove('modal-open');
+      document.body.style.overflow = '';
+      document.body.style.paddingRight = '';
+      const backdrop = document.querySelector('.modal-backdrop');
+      if (backdrop) backdrop.remove();
+      modalEl.classList.remove('show');
+      modalEl.style.display = 'none';
+      modalEl.setAttribute('aria-hidden', 'true');
+    }
   } catch (error) {
-    mensajeError.value = error.message;
+    console.error("Error al guardar:", error);
+    mostrarToast("Error de sistema", "No se pudo procesar la solicitud en el servidor.", "error");
   } finally {
     procesandoGuardado.value = false;
   }
 };
+
+const confirmarEliminacionProducto = async (producto) => {
+  if (!producto || !producto.codigo) return;
+  
+  procesandoEliminacion.value = true;
+  
+  try {
+    // 1. Eliminación real en la base de datos a través del servicio y la API REST
+    await ProductoServices.eliminarProducto(producto.codigo);
+    
+    // 2. Refrescamos la lista de la tabla consumiendo el backend
+    await cargarInventario();
+    
+    // 3. Lanzamos el Toast idéntico al de tu maquetación de referencia
+    mostrarToast(
+      "Registro eliminado", 
+      `${producto.codigo} fue dado de baja del inventario.`, 
+      "success"
+    );
+    
+    // 4. Cierre automático inmediato del modal de Bootstrap y limpieza de backdrop
+    const modalEl = document.getElementById('deleteModal');
+    if (modalEl) {
+      // Intentamos cerrar con la API oficial de Bootstrap si está disponible
+      if (window.bootstrap && window.bootstrap.Modal) {
+        const modalInstance = window.bootstrap.Modal.getInstance(modalEl) || window.bootstrap.Modal.getOrCreateInstance(modalEl);
+        modalInstance.hide();
+      }
+      
+      // Respaldo de seguridad por el DOM para asegurar que el modal se cierre y quite la pantalla gris
+      document.body.classList.remove('modal-open');
+      const backdrop = document.querySelector('.modal-backdrop');
+      if (backdrop) backdrop.remove();
+      modalEl.classList.remove('show');
+      modalEl.style.display = 'none';
+      modalEl.setAttribute('aria-hidden', 'true');
+    }
+
+  } catch (error) {
+    console.error("Error al eliminar en el servidor:", error);
+    mostrarToast("Error", "No se pudo eliminar el registro en la base de datos.", "error");
+  } finally {
+    procesandoEliminacion.value = false;
+  }
+};
+
 
 onMounted(() => {
   cargarInventario();
@@ -107,6 +202,9 @@ onMounted(() => {
 
 <template>
   <main class="content" id="contenido">
+    <!-- Componente global para la pila de Toasts flotantes -->
+    <ToastNotificaciones :notificaciones="notificaciones" @cerrar="cerrarToastPorId" />
+
     <div class="page-head">
       <div>
         <h2>Inventario de repuestos y accesorios</h2>
@@ -115,16 +213,6 @@ onMounted(() => {
       <button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#productModal" @click="prepararCreacion">
         <i class="bi bi-plus-lg"></i> Nuevo producto
       </button>
-    </div>
-
-    <div v-if="mensajeExito" class="alert alert-success alert-dismissible fade show" role="alert">
-      <i class="bi bi-check-circle-fill me-2"></i> {{ mensajeExito }}
-      <button type="button" class="btn-close" @click="mensajeExito = null" aria-label="Cerrar"></button>
-    </div>
-
-    <div v-if="mensajeError" class="alert alert-danger alert-dismissible fade show" role="alert">
-      <i class="bi bi-exclamation-triangle-fill me-2"></i> <strong>Error de sistema:</strong> {{ mensajeError }}
-      <button type="button" class="btn-close" @click="mensajeError = null" aria-label="Cerrar"></button>
     </div>
 
     <div class="summary-strip mb-3">
@@ -140,9 +228,9 @@ onMounted(() => {
         </div>
         <select class="form-select" v-model="filtroCategoria">
           <option value="">Todas las categorías</option>
-          <option value="Repuesto">Repuesto</option>
-          <option value="Accesorio">Accesorio</option>
-          <option value="Equipo">Equipo</option>
+          <option value="1">Repuesto</option>
+          <option value="2">Accesorio</option>
+          <option value="3">Equipo</option>
         </select>
         <select class="form-select" v-model="filtroEstado">
           <option value="">Todos los estados</option>
@@ -161,29 +249,48 @@ onMounted(() => {
         <h3>Cargando registros...</h3>
         <p class="small">Sincronizando de forma asíncrona con el servidor y la base de datos relacional.</p>
       </div>
-
+      
       <div v-else-if="vistaActual === 'cards'" class="product-grid">
-        <article v-for="p in productosFiltrados" :key="p.codigo" class="product-card">
+        <article v-for="p in productosFiltrados" :key="getCodigo(p)" class="product-card">
+          <!-- Zona multimedia superior con insignias flotantes -->
           <div class="product-card__media">
-            <img :src="`/assets/img/productos/${p.imagen || 'pantalla.jpg'}`" :alt="p.nombre" width="480" height="360" loading="lazy">
+            <img :src="`/assets/img/productos/${p.imagen || 'pantalla.jpg'}`" :alt="getNombre(p)" width="480" height="360" loading="lazy">
             <span class="badge-ts" :class="obtenerEstadoStock(p).clase">{{ obtenerEstadoStock(p).etiqueta }}</span>
-            <span class="cat">{{ p.categoria }}</span>
+            <span class="cat">{{ p.categoria == 1 ? 'Repuesto' : p.categoria == 2 ? 'Accesorio' : 'Equipo' }}</span>
           </div>
+
+          <!-- Cuerpo de la tarjeta -->
           <div class="product-card__body">
-            <span class="code-chip">{{ p.codigo }}</span>
-            <h3>{{ p.nombre }}</h3>
-            <span class="brand">{{ p.marca }}</span>
+            <span class="code-chip">{{ getCodigo(p) }}</span>
+            <h3>{{ getNombre(p) }}</h3>
+            <span class="brand">{{ p.marca || 'N/A' }}</span>
+            
+            <!-- Precios (USD y equivalente en Bs.) -->
             <div class="product-card__price">
-              <strong>${{ p.precio.toFixed(2) }}</strong>
+              <strong>${{ getPrecio(p).toFixed(2) }}</strong>
+              <span class="text-muted-2 small">Bs. {{ (getPrecio(p) * 36.50).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }}</span>
             </div>
+
+            <!-- Indicadores de Stock y Barra de Progreso -->
             <div class="d-flex justify-content-between mt-2 small text-muted-2">
-              <span>Stock: <strong class="text-body">{{ p.stock }}</strong> u.</span>
-              <span>Mín. {{ p.minimo }}</span>
+              <span>Stock: <strong>{{ getStock(p) }}</strong> u.</span>
+              <span>Mín. {{ getMinimo(p) }}</span>
+            </div>
+            <div class="stock-meter">
+              <span :style="{ 
+                width: Math.min(100, (getStock(p) / Math.max(getMinimo(p) * 2, 1)) * 100) + '%', 
+                backgroundColor: getStock(p) <= getMinimo(p) ? 'var(--color-warning)' : 'var(--brand-primary)' 
+              }"></span>
             </div>
           </div>
-          <div class="product-card__foot">
-            <button class="btn btn-outline-secondary btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#productModal" @click="prepararEdicion(p)">
+
+          <!-- Pie de tarjeta con botones de Editar y Eliminar idénticos a la maquetación -->
+          <div class="product-card__foot d-flex gap-2">
+            <button class="btn btn-outline-secondary btn-sm flex-grow-1" type="button" data-bs-toggle="modal" data-bs-target="#productModal" @click="prepararEdicion(p)">
               <i class="bi bi-pencil-square"></i> Editar
+            </button>
+            <button class="btn btn-outline-danger btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#deleteModal" @click="prepararEliminacion(p)" aria-label="Eliminar">
+              <i class="bi bi-trash3"></i>
             </button>
           </div>
         </article>
@@ -196,7 +303,6 @@ onMounted(() => {
               <tr>
                 <th scope="col">Producto</th>
                 <th scope="col">Código</th>
-                <th scope="col">Categoría</th>
                 <th scope="col" class="text-end">Costo</th>
                 <th scope="col" class="text-end">Precio venta</th>
                 <th scope="col" class="text-center">Stock / mín.</th>
@@ -205,20 +311,22 @@ onMounted(() => {
               </tr>
             </thead>
             <tbody>
-              <tr v-for="p in productosFiltrados" :key="p.codigo">
+              <tr v-for="p in productosFiltrados" :key="getCodigo(p)">
                 <td>
-                  <strong class="fw-semibold d-block">{{ p.nombre }}</strong>
-                  <small class="text-muted-2">{{ p.marca }}</small>
+                  <strong class="fw-semibold d-block">{{ getNombre(p) }}</strong>
+                  <small class="text-muted-2">{{ p.marca || 'N/A' }}</small>
                 </td>
-                <td><span class="code-chip">{{ p.codigo }}</span></td>
-                <td>{{ p.categoria }}</td>
-                <td class="text-end tabular">${{ p.costo.toFixed(2) }}</td>
-                <td class="text-end tabular"><strong>${{ p.precio.toFixed(2) }}</strong></td>
-                <td class="text-center tabular">{{ p.stock }} / {{ p.minimo }}</td>
+                <td><span class="code-chip">{{ getCodigo(p) }}</span></td>
+                <td class="text-end tabular">${{ getCosto(p).toFixed(2) }}</td>
+                <td class="text-end tabular"><strong>${{ getPrecio(p).toFixed(2) }}</strong></td>
+                <td class="text-center tabular">{{ getStock(p) }} / {{ getMinimo(p) }}</td>
                 <td><span class="badge-ts" :class="obtenerEstadoStock(p).clase">{{ obtenerEstadoStock(p).etiqueta }}</span></td>
                 <td class="text-end">
                   <button class="btn btn-ghost btn-icon" type="button" data-bs-toggle="modal" data-bs-target="#productModal" @click="prepararEdicion(p)" aria-label="Editar">
                     <i class="bi bi-pencil-square"></i>
+                  </button>
+                  <button class="btn btn-ghost btn-icon text-danger" type="button" data-bs-toggle="modal" data-bs-target="#deleteModal" @click="prepararEliminacion(p)" aria-label="Eliminar">
+                    <i class="bi bi-trash3"></i>
                   </button>
                 </td>
               </tr>
@@ -228,11 +336,18 @@ onMounted(() => {
       </div>
     </section>
 
+    <!-- Modales del sistema -->
     <ModalProducto 
       :producto="productoActual" 
       :esEdicion="esEdicion" 
       :cargando="procesandoGuardado"
       @guardar="guardarDatosProducto" 
+    />
+
+    <EliminarProductoModal 
+      :producto="productoAEliminar"
+      :cargando="procesandoEliminacion"
+      @confirmarEliminacion="confirmarEliminacionProducto"
     />
   </main>
 </template>

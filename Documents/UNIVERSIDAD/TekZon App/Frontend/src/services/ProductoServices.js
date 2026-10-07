@@ -1,55 +1,74 @@
 /**
  * ==========================================================================
- * SERVICIO DE PRODUCTOS E INVENTARIO (PRODUCTOSERVICES.JS) - TEKZON C.A.
+ * SERVICIO DE PRODUCTOS (PRODUCTOSERVICES.JS)
  * ==========================================================================
- * Orquesta los métodos asíncronos para interactuar con la base de datos
- * relacional a través de los endpoints de la API RESTful.
+ * Orquesta las peticiones HTTP y mapea los datos (DTO) para que coincidan
+ * con las columnas exactas de la base de datos relacional.
  */
-import apiClient from './apiClient';
+import clienteApi from './apiClient';
 
 export default {
-  /**
-   * GET /api/productos
-   * Obtiene la lista completa de repuestos, accesorios y equipos activos.
-   */
+  // 1. Obtener y adaptar los datos para el Frontend
   async listarProductos() {
-    const respuesta = await apiClient.get('/productos');
+    const respuesta = await clienteApi.get('/productos');
+    
+    // Convertimos lo que viene de la BD al formato que usa Vue
+    return respuesta.data.map(p => ({
+      codigo: p.cod_producto,
+      nombre: p.nombre_producto,
+      categoria: p.id_categoria, // Ahora usamos el ID
+      marca: p.marca,
+      costo: parseFloat(p.precio_costo),
+      precio: parseFloat(p.precio_venta),
+      stock: p.existencia,
+      minimo: p.stock_minimo,
+      imagen: p.imagen,
+      descripcion: p.descripcion
+    }));
+  },
+
+  // 2. Crear producto: Mapeo de Vue hacia la Base de Datos
+  async crearProducto(datosFormulario) {
+    const payloadBD = {
+      cod_producto: datosFormulario.codigo,
+      nombre_producto: datosFormulario.nombre,
+      id_categoria: datosFormulario.categoria, // 1, 2 o 3
+      marca: datosFormulario.marca,
+      precio_costo: datosFormulario.costo,
+      precio_venta: datosFormulario.precio,
+      existencia: datosFormulario.stock,
+      stock_minimo: datosFormulario.minimo,
+      imagen: datosFormulario.imagen,
+      descripcion: datosFormulario.descripcion
+    };
+
+    // Enviamos payloadBD (traducido) y NO datosFormulario
+    const respuesta = await clienteApi.post('/productos', payloadBD);
     return respuesta.data;
   },
 
-  /**
-   * GET /api/productos/:codigo
-   * Consulta el detalle de un artículo específico por su código.
-   */
-  async obtenerProductoPorId(codigo) {
-    const respuesta = await apiClient.get(`/productos/${codigo}`);
+  // 3. Actualizar producto: Mapeo de Vue hacia la Base de Datos
+  async actualizarProducto(codigoProducto, datosActualizados) {
+    const payloadBD = {
+      cod_producto: datosActualizados.codigo,
+      nombre_producto: datosActualizados.nombre,
+      id_categoria: datosActualizados.categoria,
+      marca: datosActualizados.marca,
+      precio_costo: datosActualizados.costo,
+      precio_venta: datosActualizados.precio,
+      existencia: datosActualizados.stock,
+      stock_minimo: datosActualizados.minimo,
+      imagen: datosActualizados.imagen,
+      descripcion: datosActualizados.descripcion
+    };
+
+    const respuesta = await clienteApi.put(`/productos/${codigoProducto}`, payloadBD);
     return respuesta.data;
   },
 
-  /**
-   * POST /api/productos
-   * Inserta un nuevo registro de repuesto o accesorio con validación de payload.
-   */
-  async crearProducto(datosProducto) {
-    const respuesta = await apiClient.post('/productos', datosProducto);
-    return respuesta.data;
-  },
-
-  /**
-   * PUT /api/productos/:codigo
-   * Actualiza la información comercial y de stock de un producto existente.
-   */
-  async actualizarProducto(codigo, datosActualizados) {
-    const respuesta = await apiClient.put(`/productos/${codigo}`, datosActualizados);
-    return respuesta.data;
-  },
-
-  /**
-   * DELETE /api/productos/:codigo
-   * Da de baja o elimina físicamente el registro del inventario.
-   */
-  async eliminarProducto(codigo) {
-    const respuesta = await apiClient.delete(`/productos/${codigo}`);
-    return respuesta.data;
-  }
+  // 4. Eliminar
+  async eliminarProducto(codigoProducto) {
+  const respuesta = await clienteApi.delete(`/productos/${codigoProducto}`);
+  return respuesta.data;
+}
 };
