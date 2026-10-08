@@ -1,92 +1,125 @@
 <script setup>
 /**
  * ==========================================================================
- * COMPONENTE SIDEBAR (MENÚ LATERAL Y NAVEGACIÓN) - TEKZON C.A.
+ * COMPONENTE SIDEBAR.VUE - TEKZON C.A.
  * ==========================================================================
- * Gestiona la barra lateral de navegación fija, la identidad visual corporativa,
- * el menú adaptativo para dispositivos móviles (hamburguesa) y el perfil del usuario.
+ *   Este es el menú lateral de navegación del sistema. Agrupa las cuatro vistas del
+ *   Módulo de Inventario según el CRUD que implementan, permitiendo al
+ *   Administrador y al Almacenista acceder a cada operación.
+ * ==========================================================================
  */
-import { defineProps, defineEmits } from 'vue';
-import logoUrl from '../assets/img/logo.svg';
 
-// Definición de propiedades para recibir el estado de apertura desde App.vue si es necesario
-defineProps({
-  estaAbierto: {
-    type: Boolean,
-    default: false
-  }
+const props = defineProps({
+  /** Controla la visibilidad del menú en pantallas pequeñas. */
+  isOpen: Boolean
 });
 
-// Evento para notificar al componente padre cuando se deba cerrar el menú en móvil
-const emit = defineEmits(['cerrarMenu']);
-
-const cerrarSidebarMovil = () => {
-  emit('cerrarMenu');
-};
+const emit = defineEmits(['close']);
 </script>
 
 <template>
-  <div>
-    <!-- ==================================================================
-         BARRA LATERAL (SIDEBAR PRINCIPAL)
-         ================================================================== -->
-    <aside class="sidebar" :class="{ 'is-open': estaAbierto }" id="sidebar" aria-label="Menú principal">
-      
-      <!-- Encabezado del Sidebar: Logotipo y Nombre de Marca -->
-      <div class="sidebar__brand">
-        <img :src="logoUrl" alt="Logo TekZon" width="34" height="34">
-        <div class="brand-word">
-          TekZone
-          <small>Gestión técnica</small>
-        </div>
-        <!-- Botón de cierre para pantallas móviles (X) -->
-        <button class="btn btn-ghost btn-icon sidebar__close ms-auto" type="button" @click="cerrarSidebarMovil" aria-label="Cerrar menú">
-          <i class="bi bi-x-lg fs-5"></i>
-        </button>
-      </div>
-
-      <!-- Enlaces de Navegación del Sistema -->
-      <nav class="sidebar__nav">
-        <p class="sidebar__label">General</p>
-        <a class="sidebar__link" href="#" @click="cerrarSidebarMovil">
-          <i class="bi bi-grid-1x2"></i> Dashboard
-        </a>
-        <a class="sidebar__link active" href="#" @click="cerrarSidebarMovil">
-          <i class="bi bi-box-seam"></i> Inventario
-        </a>
-
-        <p class="sidebar__label">Operaciones</p>
-        <a class="sidebar__link" href="#" @click="cerrarSidebarMovil">
-          <i class="bi bi-clipboard2-pulse"></i> Órdenes de servicio 
-          <span class="count">18</span>
-        </a>
-        <a class="sidebar__link" href="#" @click="cerrarSidebarMovil">
-          <i class="bi bi-cart3"></i> Ventas 
-          <span class="soon">Fase II</span>
-        </a>
-        <a class="sidebar__link" href="#" @click="cerrarSidebarMovil">
-          <i class="bi bi-cash-coin"></i> Caja y pagos 
-          <span class="soon">Fase II</span>
-        </a>
-        <a class="sidebar__link" href="#" @click="cerrarSidebarMovil">
-          <i class="bi bi-person-vcard"></i> Clientes 
-          <span class="soon">Fase II</span>
-        </a>
-      </nav>
-
-      <!-- Pie del Sidebar: Usuario Autenticado en Sesión -->
-      <div class="sidebar__foot">
-        <div class="sidebar__user">
-          <span class="avatar avatar--sm">PC</span>
-          <div>
-            <p class="name">Paola Cordero</p>
-            <p class="role">Administrador</p>
-          </div>
+  <aside class="sidebar" :class="{ 'sidebar--open': isOpen }">
+    <!-- Cabecera del menú con el logotipo corporativo -->
+    <div class="sidebar__header d-flex align-items-center justify-content-between p-3">
+      <div class="logo d-flex align-items-center text-white">
+        <img src="../assets/img/logo.svg" alt="Logo TekZon" width="35" height="35" class="me-2" />
+        <div>
+          <!-- text-white asegura que el título principal brille en blanco puro -->
+          <h5 class="mb-0 fw-bold text-white">TekZon</h5>
+          <!-- text-white-50 le da el tono platinado/gris claro al subtítulo -->
+          <small class="text-white-50" style="font-size: 0.75rem;">GESTIÓN TÉCNICA</small>
         </div>
       </div>
-    </aside>
+      <button class="btn btn-link text-white d-md-none" @click="emit('close')" aria-label="Cerrar menú">
+        <i class="bi bi-x-lg"></i>
+      </button>
+    </div>
 
-    <!-- Fondo oscuro desenfocado (Backdrop) para cerrar el menú en móviles al hacer clic fuera -->
-    <div class="sidebar-backdrop" :class="{ 'show': estaAbierto }" @click="cerrarSidebarMovil"></div>
-  </div>
+    <!-- Menú de navegación -->
+    <nav class="sidebar__nav p-3">
+      <ul class="nav flex-column">
+
+        <li class="nav-item mb-2">
+          <small class="text-muted fw-bold text-uppercase" style="font-size: 0.7rem;">General</small>
+        </li>
+        <li class="nav-item mb-3">
+          <a href="#" class="nav-link text-white text-decoration-none">
+            <i class="bi bi-grid me-2"></i> Dashboard
+          </a>
+        </li>
+
+        <!-- ============ MÓDULO INVENTARIO ============ -->
+        <li class="nav-item mb-2 mt-2">
+          <small class="text-muted fw-bold text-uppercase" style="font-size: 0.7rem;">Inventario</small>
+        </li>
+
+        <!-- Catálogo maestro de productos -->
+        <li class="nav-item">
+          <router-link to="/inventario" class="nav-link text-white text-decoration-none" active-class="active bg-dark rounded">
+            <i class="bi bi-box-seam me-2"></i> Catálogo de Productos
+          </router-link>
+        </li>
+
+        <!-- Categorías de productos -->
+        <li class="nav-item">
+          <router-link to="/categorias" class="nav-link text-white text-decoration-none" active-class="active bg-dark rounded">
+            <i class="bi bi-tags me-2"></i> Categorías
+          </router-link>
+        </li>
+
+        <!-- Historial de transacciones -->
+        <li class="nav-item">
+          <router-link to="/movimientos" class="nav-link text-white text-decoration-none" active-class="active bg-dark rounded">
+            <i class="bi bi-arrow-left-right me-2"></i> Entradas y Salidas
+          </router-link>
+        </li>
+
+        <!-- SECCIÓN OPERACIONES -->
+        <li class="nav-item mb-2 mt-4">
+          <small class="text-muted fw-bold text-uppercase" style="font-size: 0.7rem;">Operaciones</small>
+        </li>
+        <li class="nav-item">
+          <a href="#" class="nav-link text-white d-flex justify-content-between align-items-center text-decoration-none">
+            <span><i class="bi bi-tools me-2"></i> Órdenes de servicio</span>
+            <span class="badge bg-info rounded-pill">18</span>
+          </a>
+        </li>
+        <li class="nav-item">
+          <a href="#" class="nav-link text-white text-muted d-flex justify-content-between align-items-center text-decoration-none">
+            <span><i class="bi bi-cart me-2"></i> Ventas</span>
+            <span class="badge bg-secondary" style="font-size: 0.6rem;">FASE II</span>
+          </a>
+        </li>
+      </ul>
+    </nav>
+  </aside>
 </template>
+
+<style scoped>
+/* Estilos base heredados del sistema de diseño de TekZon */
+.sidebar {
+  width: 260px;
+  background-color: #0b0a08; /* brand-dark */
+  min-height: 100vh;
+  transition: transform 0.3s ease;
+}
+.nav-link {
+  opacity: 0.8;
+  transition: all 0.2s;
+  padding: 0.6rem 1rem;
+}
+.nav-link:hover, .nav-link.active {
+  opacity: 1;
+  background-color: #087ea4; /* brand-primary */
+}
+.sidebar.sidebar--open {
+  transform: translateX(0);
+}
+@media (max-width: 768px) {
+  .sidebar {
+    position: fixed;
+    z-index: 1050;
+    transform: translateX(-100%);
+  }
+}
+</style>

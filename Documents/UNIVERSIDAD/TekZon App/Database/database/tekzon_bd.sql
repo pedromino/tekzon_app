@@ -119,6 +119,20 @@ ENGINE = InnoDB;
 
 
 -- -----------------------------------------------------
+-- Table `tekzon_bd`.`categoria`
+-- -----------------------------------------------------
+DROP TABLE IF EXISTS `tekzon_bd`.`categoria` ;
+
+CREATE TABLE IF NOT EXISTS `tekzon_bd`.`categoria` (
+  `id_categoria` INT NOT NULL AUTO_INCREMENT,
+  `nombre_categoria` VARCHAR(50) NOT NULL,
+  `estado` TINYINT(1) NOT NULL DEFAULT 1 COMMENT 'Baja logica: 1 = activa, 0 = inactiva',
+  PRIMARY KEY (`id_categoria`),
+  UNIQUE INDEX `nombre_categoria_UNIQUE` (`nombre_categoria` ASC))
+ENGINE = InnoDB;
+
+
+-- -----------------------------------------------------
 -- Table `tekzon_bd`.`producto`
 -- -----------------------------------------------------
 DROP TABLE IF EXISTS `tekzon_bd`.`producto` ;
@@ -128,8 +142,55 @@ CREATE TABLE IF NOT EXISTS `tekzon_bd`.`producto` (
   `nombre_producto` VARCHAR(150) NULL,
   `precio_costo` DECIMAL(12,2) NULL,
   `precio_venta` DECIMAL(12,2) NULL,
-  `existencia` INT NULL,
-  PRIMARY KEY (`cod_producto`))
+  `existencia` INT NOT NULL DEFAULT 0 COMMENT 'Stock fisico real. Nace en 0 y solo lo altera el kardex o el ajuste de almacen',
+  `stock_minimo` INT NOT NULL DEFAULT 0 COMMENT 'Umbral minimo de reposicion para alertas de stock bajo',
+  `id_categoria` INT NULL,
+  `marca` VARCHAR(50) NULL,
+  `descripcion` TEXT NULL,
+  `imagen` VARCHAR(255) NULL DEFAULT 'pantalla.jpg',
+  `estado` TINYINT(1) NOT NULL DEFAULT 1 COMMENT 'Baja logica: 1 = activo, 0 = inactivo',
+  PRIMARY KEY (`cod_producto`),
+  INDEX `idx_producto_estado_categoria` (`estado` ASC, `id_categoria` ASC) ,
+  INDEX `fk_producto_categoria_idx` (`id_categoria` ASC) ,
+  CONSTRAINT `fk_producto_categoria`
+    FOREIGN KEY (`id_categoria`)
+    REFERENCES `tekzon_bd`.`categoria` (`id_categoria`)
+    ON DELETE NO ACTION
+    ON UPDATE CASCADE)
+ENGINE = InnoDB;
+
+
+-- -----------------------------------------------------
+-- Table `tekzon_bd`.`movimiento_inventario`
+-- -----------------------------------------------------
+-- Kádex transaccional del CRUD 3: registra cada Entrada, Salida o Ajuste
+-- físico de existencias con su existencia previa y posterior calculada.
+DROP TABLE IF EXISTS `tekzon_bd`.`movimiento_inventario` ;
+
+CREATE TABLE IF NOT EXISTS `tekzon_bd`.`movimiento_inventario` (
+  `id_movimiento` INT NOT NULL AUTO_INCREMENT,
+  `cod_producto` VARCHAR(50) NOT NULL,
+  `id_usuario` INT NOT NULL,
+  `tipo_movimiento` VARCHAR(20) NOT NULL COMMENT 'ENTRADA: Compra/Devolucion, SALIDA: Merma/Uso, AJUSTE: Conteo fisico',
+  `cantidad` INT NOT NULL COMMENT 'Cantidad de unidades afectadas',
+  `existencia_previa` INT NOT NULL COMMENT 'Stock registrado antes de la operacion',
+  `existencia_posterior` INT NOT NULL COMMENT 'Stock resultante tras la operacion',
+  `motivo` VARCHAR(150) NOT NULL COMMENT 'Concepto o justificacion de la transaccion',
+  `fecha_movimiento` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id_movimiento`),
+  INDEX `idx_movimiento_fecha_tipo` (`fecha_movimiento` ASC, `tipo_movimiento` ASC) ,
+  INDEX `fk_movimiento_producto_idx` (`cod_producto` ASC) ,
+  INDEX `fk_movimiento_usuario_idx` (`id_usuario` ASC) ,
+  CONSTRAINT `fk_movimiento_producto`
+    FOREIGN KEY (`cod_producto`)
+    REFERENCES `tekzon_bd`.`producto` (`cod_producto`)
+    ON UPDATE CASCADE
+    ON DELETE RESTRICT,
+  CONSTRAINT `fk_movimiento_usuario`
+    FOREIGN KEY (`id_usuario`)
+    REFERENCES `tekzon_bd`.`usuario` (`id_usuario`)
+    ON UPDATE CASCADE
+    ON DELETE RESTRICT)
 ENGINE = InnoDB;
 
 

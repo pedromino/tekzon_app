@@ -3,7 +3,7 @@
  * ==========================================================================
  * COMPONENTE DE CARGA (LOADINGSPINNER.VUE)
  * ==========================================================================
- * Muestra un indicador visual animado (spinner) durante las peticiones asíncronas.
+ * Muestra un indicador visual animado (spinner)
  */
 defineProps({
   mensaje: {
