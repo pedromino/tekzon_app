@@ -10,9 +10,6 @@
  *   valida contra el backend y, si son correctos, entrega el control al Panel
  *   del sistema (Inventario, Servicio Técnico, Venta Directa, etc.).
  *
- *   Incluye el BOTÓN DE ACCESO RÁPIDO del administrador académico para agilizar
- *   la demostración en la sustentación (rellena las credenciales, no las envía).
- *
  * PROPÓSITO TÉCNICO:
  *   Implementa los 3 estados de interfaz exigidos por la cátedra:
  *     · CARGANDO -> el botón se deshabilita y muestra un spinner mientras se
@@ -129,14 +126,6 @@ const enviarRegistro = async () => {
 };
 
 // ==========================================================================
-// CREDENCIALES DE DEMOSTRACIÓN (usuario sembrado por la migración 005)
-// ==========================================================================
-const credencialesDemo = {
-  username: 'admin',
-  contrasenia: 'TekZon2026*'
-};
-
-// ==========================================================================
 // SISTEMA DE NOTIFICACIONES TOAST
 // ==========================================================================
 const mostrarToast = (titulo, mensaje, tipo = 'success') => {
@@ -250,12 +239,6 @@ const iniciarSesion = async () => {
     // Se restaura el botón pase lo que pase (éxito o error).
     enviando.value = false;
   }
-};
-
-/** Rellena el formulario con las credenciales del administrador académico. */
-const usarCredencialesDemo = () => {
-  credenciales.value = { ...credencialesDemo };
-  limpiarErrores();
 };
 </script>
 
@@ -381,7 +364,7 @@ const usarCredencialesDemo = () => {
                 type="text"
                 class="form-control"
                 :class="{ 'is-invalid': erroresCampo.username }"
-                placeholder="admin"
+                placeholder="Nombre de usuario"
                 autocomplete="username"
                 :disabled="enviando"
               />
@@ -507,29 +490,6 @@ const usarCredencialesDemo = () => {
             {{ enviando ? 'Enviando registro…' : 'Registrar mi solicitud' }}
           </button>
         </form>
-
-        <!-- ============================================================
-             ACCESO RÁPIDO PARA LA DEMOSTRACIÓN ACADÉMICA
-             ============================================================ -->
-        <div class="divider-text">acceso de demostración</div>
-
-        <div class="demo-users">
-          <button type="button" class="demo-user" :disabled="enviando" @click="usarCredencialesDemo">
-            <i class="bi bi-shield-check"></i>
-            <strong>Administrador</strong>
-            admin
-          </button>
-        </div>
-
-        <div class="role-box mt-3">
-          <div>
-            <p class="mb-0">
-              <i class="bi bi-info-circle me-1"></i>
-              Esta fase incorpora únicamente el rol <strong>Administrador</strong>,
-              con permisos globales sobre todos los módulos.
-            </p>
-          </div>
-        </div>
       </div>
     </section>
 
