@@ -222,7 +222,7 @@ const salirDelSistema = async () => {
           </li>
           <li class="nav-item">
             <router-link to="/configuracion" class="nav-link text-white d-flex justify-content-between align-items-center text-decoration-none" active-class="active bg-dark rounded">
-              <span><i class="bi bi-gear me-2"></i> Configuración</span>
+              <span><i class="bi bi-gear me-2"></i> Permisos de Usuario</span>
               <!-- Contador en vivo de usuarios pendientes de aprobación -->
               <span v-if="usuariosPendientes > 0" class="badge bg-warning text-dark rounded-pill fw-bold">
                 {{ usuariosPendientes }}

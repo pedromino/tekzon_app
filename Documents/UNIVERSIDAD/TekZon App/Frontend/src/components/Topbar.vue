@@ -23,6 +23,7 @@ import { useRoute, useRouter } from 'vue-router';
 import AlertaStockServices from '../services/AlertaStockServices.js';
 import AutenticacionServices from '../services/AutenticacionServices.js';
 import UsuarioServices from '../services/UsuarioServices.js';
+import ModalManualUsuario from './ModalManualUsuario.vue';
 import { abrirModal, cerrarModal } from '../utils/utilidadesModales.js';
 import { sesion, inicialesUsuario, etiquetaRol, esAdministrador } from '../services/sesion.js';
 
@@ -130,6 +131,13 @@ const abrirModalNotificacionUsuarios = async () => {
 };
 
 /**
+ * Abre el modal del manual de usuario contextual.
+ */
+const abrirManualUsuario = () => {
+  abrirModal('modalManualUsuario');
+};
+
+/**
  * Asigna el rol seleccionado a un nuevo usuario directamente desde el modal.
  */
 const asignarRolNuevoUsuario = async (usuario) => {
@@ -208,6 +216,17 @@ watch(() => route.path, () => {
     </div>
 
     <div class="topbar__actions ms-auto position-relative d-flex align-items-center gap-1">
+      <!-- ============ MANUAL DE USUARIO / GUÍA CONTEXTUAL PASO A PASO ============ -->
+      <button
+        class="btn btn-ghost btn-icon position-relative me-1"
+        type="button"
+        title="Manual de usuario: Guía paso a paso de este módulo"
+        aria-label="Manual de Usuario"
+        @click="abrirManualUsuario"
+      >
+        <i class="bi bi-question-circle-fill fs-5 text-primary"></i>
+      </button>
+
       <!-- ============ NOTIFICACIÓN DE NUEVOS USUARIOS (SOLO ADMINISTRADOR) ============ -->
       <button
         v-if="esAdministrador"
@@ -416,6 +435,9 @@ watch(() => route.path, () => {
         </div>
       </div>
     </Teleport>
+
+    <!-- Modal de Manual de Usuario Contextual -->
+    <ModalManualUsuario id-modal="modalManualUsuario" />
   </header>
 </template>
 
