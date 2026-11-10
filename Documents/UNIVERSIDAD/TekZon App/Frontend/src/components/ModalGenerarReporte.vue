@@ -122,7 +122,7 @@ const procesarReporte = async () => {
         tipo: 'success'
       });
     } else {
-      // Caso 2: Descarga directa de archivo (PDF / Excel)
+      // Caso 2: Visualización inline en nueva pestaña (PDF) o descarga de archivo (Excel)
       const resultado = await ReporteServices.descargarReporte({
         tipo: props.tipoReporte,
         formato: formato.value,
@@ -130,11 +130,19 @@ const procesarReporte = async () => {
       });
 
       cerrarModal(props.idModal);
-      emit('notificar', {
-        titulo: '¡Reporte Descargado!',
-        mensaje: `Archivo "${resultado.nombreArchivo}" generado correctamente.`,
-        tipo: 'success'
-      });
+      if (resultado?.accion === 'visualizado') {
+        emit('notificar', {
+          titulo: '¡Reporte Visualizado!',
+          mensaje: `El reporte "${resultado.nombreArchivo}" se abrió en una nueva pestaña.`,
+          tipo: 'success'
+        });
+      } else {
+        emit('notificar', {
+          titulo: '¡Reporte Descargado!',
+          mensaje: `Archivo "${resultado?.nombreArchivo || 'reporte.xlsx'}" descargado correctamente.`,
+          tipo: 'success'
+        });
+      }
     }
 
     reiniciarFormulario();
@@ -449,14 +457,14 @@ const procesarReporte = async () => {
             </button>
             <button
               class="btn d-flex align-items-center gap-2 btn-sm fw-bold px-3"
-              :class="enviarPorEmail ? 'btn-success' : 'btn-primary'"
+              :class="enviarPorEmail ? 'btn-success' : (formato === 'pdf' ? 'btn-primary' : 'btn-success')"
               type="submit"
               :disabled="procesando"
             >
               <span v-if="procesando" class="spinner-border spinner-border-sm"></span>
               <template v-else>
-                <i :class="enviarPorEmail ? 'bi bi-send-fill' : 'bi bi-download'"></i>
-                <span>{{ enviarPorEmail ? 'Generar y Enviar por Correo' : `Descargar Reporte (${formato.toUpperCase()})` }}</span>
+                <i :class="enviarPorEmail ? 'bi bi-send-fill' : (formato === 'pdf' ? 'bi bi-eye-fill' : 'bi bi-file-earmark-excel-fill')"></i>
+                <span>{{ enviarPorEmail ? 'Generar y Enviar por Correo' : (formato === 'pdf' ? 'Ver Reporte' : 'Descargar Excel (.XLSX)') }}</span>
               </template>
             </button>
           </div>

@@ -91,9 +91,10 @@ export const ReporteController = {
         });
       }
 
-      // 4. Caso: Descarga directa de archivo
+      // 4. Caso: Visualización inline en navegador (PDF) o descarga de archivo (Excel)
+      const disposicion = formatoLimpio === 'pdf' ? 'inline' : 'attachment';
       res.setHeader('Content-Type', contentType);
-      res.setHeader('Content-Disposition', `attachment; filename="${nombreArchivo}"`);
+      res.setHeader('Content-Disposition', `${disposicion}; filename="${nombreArchivo}"`);
       res.setHeader('Content-Length', bufferArchivo.length);
 
       return res.status(200).send(bufferArchivo);

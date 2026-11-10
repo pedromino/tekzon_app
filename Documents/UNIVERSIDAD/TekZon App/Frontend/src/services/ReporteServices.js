@@ -44,23 +44,41 @@ export default {
         }
       }
 
-      // Crear URL de descarga y disparar clic automático
+      // Crear Blob con el tipo MIME adecuado
+      const esExcel = formato === 'excel';
       const blob = new Blob([respuesta.data], {
-        type: formato === 'excel'
+        type: esExcel
           ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
           : 'application/pdf'
       });
 
       const urlBlob = window.URL.createObjectURL(blob);
-      const enlace = document.createElement('a');
-      enlace.href = urlBlob;
-      enlace.download = nombreArchivo;
-      document.body.appendChild(enlace);
-      enlace.click();
-      document.body.removeChild(enlace);
-      window.URL.revokeObjectURL(urlBlob);
 
-      return { exito: true, nombreArchivo };
+      if (esExcel) {
+        // En Excel se ejecuta la descarga del libro de cálculo
+        const enlace = document.createElement('a');
+        enlace.href = urlBlob;
+        enlace.download = nombreArchivo;
+        document.body.appendChild(enlace);
+        enlace.click();
+        document.body.removeChild(enlace);
+        setTimeout(() => window.URL.revokeObjectURL(urlBlob), 10000);
+        return { exito: true, nombreArchivo, accion: 'descargado' };
+      } else {
+        // En PDF se abre directamente en una nueva pestaña del navegador (visualizador nativo)
+        const ventana = window.open(urlBlob, '_blank');
+        if (!ventana || ventana.closed || typeof ventana.closed === 'undefined') {
+          // Si el bloqueador de ventanas emergentes interfiere, fallback a enlace
+          const enlace = document.createElement('a');
+          enlace.href = urlBlob;
+          enlace.target = '_blank';
+          document.body.appendChild(enlace);
+          enlace.click();
+          document.body.removeChild(enlace);
+        }
+        setTimeout(() => window.URL.revokeObjectURL(urlBlob), 60000);
+        return { exito: true, nombreArchivo, accion: 'visualizado' };
+      }
     } catch (error) {
       console.error('Error al descargar reporte:', error);
       throw error;

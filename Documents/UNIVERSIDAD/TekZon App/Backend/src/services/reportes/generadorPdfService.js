@@ -3,8 +3,13 @@
  * GENERADOR DE REPORTES EN PDF (generadorPdfService.js)
  * TEKZON C.A. - SISTEMA DE GESTIÓN TÉCNICA E INVENTARIO
  * ==========================================================================
- * Utiliza PDFKit y pdfkit-table para generar documentos con membrete
- * corporativo, tabla formateada, KPIs ejecutivos y pie legal.
+ * Genera documentos PDF con diseño visual simétrico, balanceado y limpio:
+ *   - Membrete corporativo oficial de TekZon C.A.
+ *   - Cuadrícula de KPIs con tarjetas estilizadas y separación vertical
+ *     garantizada para evitar desbordes y encimamiento de textos.
+ *   - Tabla analítica con cálculo proporcional de anchos de columna sobre
+ *     el ancho útil total de la página (layout responsivo para PDF).
+ *   - Paginación automática "Página X de Y" en pie legal.
  * ==========================================================================
  */
 import PDFDocument from 'pdfkit-table';
@@ -31,17 +36,20 @@ export const GeneradorPdfService = {
    * Genera el buffer del reporte PDF a partir de los datos analíticos.
    *
    * @param {Object} reporteData - Objeto devuelto por ReportesDataService
-   * @param {Object} opciones - Metadatos adicionales (usuarioEmisor, filtrosTexto)
+   * @param {Object} opciones - Metadatos adicionales (usuarioEmisor)
    * @returns {Promise<Buffer>}
    */
   async generarBufferPdf(reporteData, opciones = {}) {
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
       try {
-        const esLandscape = (reporteData.columnas?.length || 0) >= 6;
+        const totalColumnas = reporteData.columnas?.length || 0;
+        // Para 5 o más columnas se utiliza orientación horizontal (Landscape)
+        const esLandscape = totalColumnas >= 5;
+
         const doc = new PDFDocument({
           size: 'A4',
           layout: esLandscape ? 'landscape' : 'portrait',
-          margins: { top: 36, bottom: 36, left: 36, right: 36 },
+          margins: { top: 32, bottom: 32, left: 32, right: 32 },
           bufferPages: true
         });
 
@@ -50,6 +58,7 @@ export const GeneradorPdfService = {
         doc.on('end', () => resolve(Buffer.concat(buffers)));
         doc.on('error', (err) => reject(err));
 
+        const anchoUtil = doc.page.width - doc.page.margins.left - doc.page.margins.right;
         const usuarioEmisor = opciones.usuarioEmisor || 'Administrador del Sistema';
         const ahora = new Date().toLocaleString('es-VE', {
           dateStyle: 'medium',
@@ -59,13 +68,11 @@ export const GeneradorPdfService = {
         // ====================================================================
         // 1. ENCABEZADO INSTITUCIONAL TEKZON C.A.
         // ====================================================================
-        const anchoUtil = doc.page.width - doc.page.margins.left - doc.page.margins.right;
-
         doc
           .fontSize(16)
           .font('Helvetica-Bold')
           .fillColor('#0f172a')
-          .text('TEKZON C.A.', { continued: false });
+          .text('TEKZON C.A.', doc.page.margins.left, doc.page.margins.top);
 
         doc
           .fontSize(8)
@@ -74,128 +81,170 @@ export const GeneradorPdfService = {
           .text('RIF J-40123456-1 · Carrera 28 entre calles 45 y 46, Barquisimeto, Edo. Lara')
           .text('Sistema de Gestión Técnica e Inventario · IUJO ADS-433');
 
-        doc.moveDown(0.5);
+        doc.moveDown(0.4);
 
-        // Barra decorativa azul
+        // Línea divisoria decorativa azul institucional
         doc
-          .rect(doc.x, doc.y, anchoUtil, 2)
+          .rect(doc.page.margins.left, doc.y, anchoUtil, 2)
           .fillColor('#2563eb')
           .fill();
 
-        doc.moveDown(0.7);
+        doc.moveDown(0.5);
 
         // ====================================================================
-        // 2. TÍTULO DEL REPORTE Y TIPO
+        // 2. TÍTULO Y METADATOS DEL REPORTE
         // ====================================================================
         doc
-          .fontSize(14)
+          .fontSize(13)
           .font('Helvetica-Bold')
           .fillColor('#0f172a')
-          .text(reporteData.titulo);
+          .text(reporteData.titulo, doc.page.margins.left);
 
         doc
-          .fontSize(8.5)
+          .fontSize(8)
           .font('Helvetica')
           .fillColor('#475569')
           .text(`Módulo: ${reporteData.modulo} | Clasificación: ${reporteData.tipo} | Emitido: ${ahora} por ${usuarioEmisor}`);
 
         if (reporteData.descripcion) {
           doc
-            .fontSize(8)
+            .fontSize(7.5)
             .font('Helvetica-Oblique')
             .fillColor('#64748b')
             .text(reporteData.descripcion);
         }
 
-        doc.moveDown(0.8);
+        doc.moveDown(0.6);
 
         // ====================================================================
-        // 3. CUADRÍCULA DE KPIS / RESUMEN GERENCIAL
+        // 3. TARJETAS DE KPIS EJECUTIVOS (LAYOUT SEGURO SIN SUPERPOSICIONES)
         // ====================================================================
         if (Array.isArray(reporteData.kpis) && reporteData.kpis.length > 0) {
-          const kpis = reporteData.kpis;
-          const kpiWidth = anchoUtil / Math.min(kpis.length, 6);
-          const yInicialKpi = doc.y;
+          const kpis = reporteData.kpis.slice(0, 6);
+          const numKpis = kpis.length;
+          const gap = 8;
+          const cardWidth = (anchoUtil - (gap * (numKpis - 1))) / numKpis;
+          const cardHeight = 46;
+          const yKpi = doc.y;
 
-          doc.rect(doc.page.margins.left, yInicialKpi, anchoUtil, 38).fillColor('#f8fafc').fill();
-          doc.rect(doc.page.margins.left, yInicialKpi, anchoUtil, 38).lineWidth(0.5).strokeColor('#e2e8f0').stroke();
+          kpis.forEach((kpi, idx) => {
+            const posX = doc.page.margins.left + idx * (cardWidth + gap);
 
-          kpis.slice(0, 6).forEach((kpi, index) => {
-            const posX = doc.page.margins.left + (index * kpiWidth);
-            const valFormateado = formatearValor(kpi.valor, kpi.tipo);
-
+            // Fondo y borde redondeado de la tarjeta
             doc
-              .fontSize(7)
+              .roundedRect(posX, yKpi, cardWidth, cardHeight, 3)
+              .fillColor('#f8fafc')
+              .fill()
+              .lineWidth(0.5)
+              .strokeColor('#e2e8f0')
+              .stroke();
+
+            // Línea de acento superior según tipo de indicador
+            const esAlerta = kpi.tipo === 'alerta' || (typeof kpi.valor === 'number' && kpi.valor > 0 && /alerta|agotado/i.test(kpi.etiqueta));
+            doc
+              .roundedRect(posX, yKpi, cardWidth, 2.5, 1.5)
+              .fillColor(esAlerta ? '#ef4444' : '#2563eb')
+              .fill();
+
+            // Etiqueta del KPI (arriba, con margen seguro)
+            doc
+              .fontSize(6)
               .font('Helvetica-Bold')
               .fillColor('#64748b')
-              .text(kpi.etiqueta.toUpperCase(), posX + 6, yInicialKpi + 6, {
-                width: kpiWidth - 12,
-                align: 'center'
+              .text(String(kpi.etiqueta || '').toUpperCase(), posX + 4, yKpi + 6, {
+                width: cardWidth - 8,
+                align: 'center',
+                lineGap: 1
               });
 
+            // Valor del KPI (abajo, sin riesgo de superposición)
+            const valorFormateado = formatearValor(kpi.valor, kpi.tipo);
             doc
-              .fontSize(10)
+              .fontSize(9.5)
               .font('Helvetica-Bold')
-              .fillColor('#0f172a')
-              .text(valFormateado, posX + 6, yInicialKpi + 18, {
-                width: kpiWidth - 12,
+              .fillColor(esAlerta ? '#b91c1c' : '#0f172a')
+              .text(valorFormateado, posX + 4, yKpi + 26, {
+                width: cardWidth - 8,
                 align: 'center'
               });
           });
 
-          doc.y = yInicialKpi + 46;
+          // IMPORTANTE: Se reposiciona el cursor al margen izquierdo y debajo de las tarjetas
+          doc.x = doc.page.margins.left;
+          doc.y = yKpi + cardHeight + 14;
         }
 
         // ====================================================================
-        // 4. TABLA DE DATOS ANALÍTICOS (pdfkit-table)
+        // 4. TABLA DE DATOS CON ANCHOS PORCENTUALES Y AJUSTE RESPONSIVO
         // ====================================================================
-        const headers = reporteData.columnas.map((col) => ({
-          label: col.etiqueta,
-          property: col.clave,
-          width: undefined, // Ajuste automático proporcional
-          renderer: null
-        }));
+        // Suma de pesos de las columnas para distribución proporcional
+        const sumaPesos = reporteData.columnas.reduce((acc, c) => acc + (c.ancho || 10), 0);
+        let anchoAcumulado = 0;
+
+        const headers = reporteData.columnas.map((col, idx) => {
+          let colWidth = Math.floor(((col.ancho || 10) / sumaPesos) * anchoUtil);
+          if (idx === reporteData.columnas.length - 1) {
+            colWidth = anchoUtil - anchoAcumulado; // Ajuste del último pixel
+          } else {
+            anchoAcumulado += colWidth;
+          }
+
+          let align = 'left';
+          if (['moneda', 'porcentaje', 'entero'].includes(col.tipo)) align = 'right';
+          if (['codigo', 'situacion', 'estado', 'serial', 'id'].includes(col.clave)) align = 'center';
+
+          return {
+            label: col.etiqueta,
+            property: col.clave,
+            width: colWidth,
+            align,
+            headerAlign: align === 'right' ? 'right' : (align === 'center' ? 'center' : 'left'),
+            renderer: null
+          };
+        });
 
         const rows = reporteData.filas.map((fila) => {
-          const filaFormateada = [];
+          const rowData = {};
           reporteData.columnas.forEach((col) => {
             const v = fila[col.clave];
-            filaFormateada.push(formatearValor(v, col.tipo));
+            rowData[col.clave] = formatearValor(v, col.tipo);
           });
-          return filaFormateada;
+          return rowData;
         });
 
         const table = {
           title: '',
           subtitle: '',
-          headers: reporteData.columnas.map((c) => c.etiqueta),
-          rows
+          headers,
+          datas: rows
         };
 
-        doc.table(table, {
-          prepareHeader: () => doc.font('Helvetica-Bold').fontSize(7.5).fillColor('#ffffff'),
+        await doc.table(table, {
+          x: doc.page.margins.left,
+          width: anchoUtil,
+          prepareHeader: () => doc.font('Helvetica-Bold').fontSize(7).fillColor('#ffffff'),
           prepareRow: (row, indexColumn, indexRow, rectRow, rectCell) => {
-            doc.font('Helvetica').fontSize(7).fillColor('#1e293b');
+            doc.font('Helvetica').fontSize(6.8).fillColor('#1e293b');
           },
           divider: {
             header: { disabled: false, width: 1, opacity: 1 },
-            horizontal: { disabled: false, width: 0.5, opacity: 0.3 }
+            horizontal: { disabled: false, width: 0.5, opacity: 0.25 }
           },
-          padding: [3, 3, 3, 3],
-          headerColor: '#0f172a',
-          columnSpacing: 4
+          padding: [3, 4, 3, 4],
+          headerColor: '#1e293b',
+          headerOpacity: 1
         });
 
         // ====================================================================
-        // 5. PIE DE PÁGINA Y NUMERACIÓN "Página X de Y"
+        // 5. PIE DE PÁGINA "Página X de Y"
         // ====================================================================
         const range = doc.bufferedPageRange();
         for (let i = range.start; i < (range.start + range.count); i++) {
           doc.switchToPage(i);
 
-          const pieY = doc.page.height - 24;
+          const pieY = doc.page.height - 20;
           doc
-            .fontSize(7)
+            .fontSize(6.8)
             .font('Helvetica')
             .fillColor('#94a3b8')
             .text(
