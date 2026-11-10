@@ -6,10 +6,15 @@
  * ==========================================================================
  */
 import clienteApi from './apiClient';
+import { obtenerToken } from './sesion';
+
+const obtenerUrlBase = () => {
+  return import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+};
 
 export default {
   /**
-   * DESCARGA DIRECTA DE REPORTE (PDF o Excel).
+   * VISUALIZACIÓN DIRECTA (PDF en nueva pestaña) O DESCARGA (Excel).
    *
    * @param {Object} params
    * @param {string} params.tipo - 'productos' | 'categorias' | 'movimientos' | 'proveedores' | 'ordenes' | 'dispositivos' | 'caja' | 'ventas' | 'clientes'
@@ -18,11 +23,44 @@ export default {
    */
   async descargarReporte({ tipo, formato = 'pdf', filtros = {} }) {
     try {
+      const esPdf = String(formato).toLowerCase() !== 'excel';
+
+      if (esPdf) {
+        // En PDF: Navegación directa en nueva pestaña al endpoint con cabeceras Content-Type: application/pdf e inline
+        const token = obtenerToken();
+        const params = new URLSearchParams();
+        params.append('tipo', tipo);
+        params.append('formato', 'pdf');
+        if (token) params.append('token', token);
+
+        Object.keys(filtros || {}).forEach((k) => {
+          if (filtros[k] !== '' && filtros[k] !== null && filtros[k] !== undefined) {
+            params.append(k, filtros[k]);
+          }
+        });
+
+        const urlCompleta = `${obtenerUrlBase()}/reportes/ver?${params.toString()}`;
+        const ventana = window.open(urlCompleta, '_blank');
+
+        if (!ventana || ventana.closed || typeof ventana.closed === 'undefined') {
+          // Respaldo en caso de que el navegador restrinja popups automáticos
+          const enlace = document.createElement('a');
+          enlace.href = urlCompleta;
+          enlace.target = '_blank';
+          document.body.appendChild(enlace);
+          enlace.click();
+          document.body.removeChild(enlace);
+        }
+
+        return { exito: true, nombreArchivo: `Reporte_${tipo}.pdf`, accion: 'visualizado' };
+      }
+
+      // En Excel: Descarga de archivo mediante Blob
       const respuesta = await clienteApi.post(
         '/reportes/generar',
         {
           tipo,
-          formato,
+          formato: 'excel',
           enviarEmail: false,
           filtros
         },
@@ -31,10 +69,8 @@ export default {
         }
       );
 
-      // Obtener o inferir el nombre del archivo
-      const extension = formato === 'excel' ? 'xlsx' : 'pdf';
       const fechaSlug = new Date().toISOString().slice(0, 10);
-      let nombreArchivo = `Reporte_${tipo}_${fechaSlug}.${extension}`;
+      let nombreArchivo = `Reporte_${tipo}_${fechaSlug}.xlsx`;
 
       const disposicion = respuesta.headers['content-disposition'];
       if (disposicion) {
@@ -44,43 +80,22 @@ export default {
         }
       }
 
-      // Crear Blob con el tipo MIME adecuado
-      const esExcel = formato === 'excel';
       const blob = new Blob([respuesta.data], {
-        type: esExcel
-          ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-          : 'application/pdf'
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
       });
 
       const urlBlob = window.URL.createObjectURL(blob);
+      const enlace = document.createElement('a');
+      enlace.href = urlBlob;
+      enlace.download = nombreArchivo;
+      document.body.appendChild(enlace);
+      enlace.click();
+      document.body.removeChild(enlace);
+      setTimeout(() => window.URL.revokeObjectURL(urlBlob), 10000);
 
-      if (esExcel) {
-        // En Excel se ejecuta la descarga del libro de cálculo
-        const enlace = document.createElement('a');
-        enlace.href = urlBlob;
-        enlace.download = nombreArchivo;
-        document.body.appendChild(enlace);
-        enlace.click();
-        document.body.removeChild(enlace);
-        setTimeout(() => window.URL.revokeObjectURL(urlBlob), 10000);
-        return { exito: true, nombreArchivo, accion: 'descargado' };
-      } else {
-        // En PDF se abre directamente en una nueva pestaña del navegador (visualizador nativo)
-        const ventana = window.open(urlBlob, '_blank');
-        if (!ventana || ventana.closed || typeof ventana.closed === 'undefined') {
-          // Si el bloqueador de ventanas emergentes interfiere, fallback a enlace
-          const enlace = document.createElement('a');
-          enlace.href = urlBlob;
-          enlace.target = '_blank';
-          document.body.appendChild(enlace);
-          enlace.click();
-          document.body.removeChild(enlace);
-        }
-        setTimeout(() => window.URL.revokeObjectURL(urlBlob), 60000);
-        return { exito: true, nombreArchivo, accion: 'visualizado' };
-      }
+      return { exito: true, nombreArchivo, accion: 'descargado' };
     } catch (error) {
-      console.error('Error al descargar reporte:', error);
+      console.error('Error al generar reporte:', error);
       throw error;
     }
   },

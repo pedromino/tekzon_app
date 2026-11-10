@@ -14,6 +14,10 @@ const router = Router();
 // Todas las operaciones de reporte requieren usuario autenticado
 router.use(exigirSesion);
 
+// Visualización directa en navegador (PDF inline vía GET)
+router.get('/ver', ReporteController.verReporte);
+
+// Generación analítica multiformato (PDF, Excel, Correo vía POST)
 router.post('/generar', ReporteController.generarReporte);
 router.get('/datos/:tipo', ReporteController.getDatosReporte);
 

@@ -11,7 +11,61 @@ import { GeneradorExcelService } from '../services/reportes/generadorExcelServic
 import { EmailReporteService } from '../services/reportes/emailReporteService.js';
 import { responderConError } from '../utils/erroresNegocio.js';
 
+const sanitizarNombreArchivo = (texto) => {
+  return String(texto || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9_.-]/g, '_');
+};
+
 export const ReporteController = {
+  /**
+   * GET /api/reportes/ver
+   * Visualización directa en el navegador web con visualizador nativo integrado.
+   * Responde con 'Content-Type: application/pdf' y 'Content-Disposition: inline'.
+   */
+  async verReporte(req, res) {
+    try {
+      const { tipo, formato = 'pdf', token, ...filtros } = req.query;
+
+      if (!tipo) {
+        return res.status(400).send('Debe especificar el tipo de reporte a visualizar.');
+      }
+
+      const usuarioEmisor = req.usuarioAutenticado?.nombre_usuario || 'Administrador';
+      const reporteData = await ReportesDataService.obtenerDatosReporte(tipo, filtros);
+
+      const formatoLimpio = String(formato).toLowerCase() === 'excel' ? 'excel' : 'pdf';
+      let bufferArchivo;
+      let extension;
+      let contentType;
+
+      if (formatoLimpio === 'excel') {
+        bufferArchivo = await GeneradorExcelService.generarBufferExcel(reporteData, { usuarioEmisor });
+        extension = 'xlsx';
+        contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      } else {
+        bufferArchivo = await GeneradorPdfService.generarBufferPdf(reporteData, { usuarioEmisor });
+        extension = 'pdf';
+        contentType = 'application/pdf';
+      }
+
+      const fechaSlug = new Date().toISOString().slice(0, 10);
+      const nombreArchivo = sanitizarNombreArchivo(`Reporte_${reporteData.modulo}_${fechaSlug}.${extension}`);
+      const disposicion = formatoLimpio === 'pdf' ? 'inline' : 'attachment';
+
+      res.setHeader('Content-Type', contentType);
+      res.setHeader('Content-Disposition', `${disposicion}; filename="${nombreArchivo}"`);
+      res.setHeader('Content-Length', bufferArchivo.length);
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+
+      return res.status(200).send(bufferArchivo);
+    } catch (error) {
+      console.error('Error en verReporte:', error);
+      return responderConError(res, error, 'GET /api/reportes/ver');
+    }
+  },
+
   /**
    * POST /api/reportes/generar
    *
@@ -58,7 +112,7 @@ export const ReporteController = {
       }
 
       const fechaSlug = new Date().toISOString().slice(0, 10);
-      const nombreArchivo = `Reporte_${reporteData.modulo.replace(/\s+/g, '_')}_${fechaSlug}.${extension}`;
+      const nombreArchivo = sanitizarNombreArchivo(`Reporte_${reporteData.modulo}_${fechaSlug}.${extension}`);
 
       // 3. Caso: Envío por correo electrónico
       if (enviarEmail || Boolean(req.body.enviar_email)) {

@@ -212,14 +212,21 @@ export const verificarTokenSesion = (token) => {
 };
 
 /**
- * Extrae el token del encabezado `Authorization: Bearer <token>`.
+ * Extrae el token del encabezado `Authorization: Bearer <token>` o del parámetro query `?token=`.
  * @param {import('express').Request} req
  * @returns {string|null}
  */
 export const extraerTokenDePeticion = (req) => {
   const encabezado = req.headers?.authorization || '';
 
-  if (!encabezado.toLowerCase().startsWith('bearer ')) return null;
+  if (encabezado.toLowerCase().startsWith('bearer ')) {
+    return encabezado.slice(7).trim() || null;
+  }
 
-  return encabezado.slice(7).trim() || null;
+  // Soporte para visualización directa de documentos en nuevas pestañas del navegador
+  if (req.query?.token) {
+    return String(req.query.token).trim() || null;
+  }
+
+  return null;
 };
