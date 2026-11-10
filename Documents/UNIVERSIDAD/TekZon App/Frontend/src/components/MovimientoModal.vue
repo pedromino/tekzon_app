@@ -397,10 +397,12 @@ const nombreAccion = computed(() =>
                 <label class="form-label">Existencia resultante</label>
                 <div class="d-flex align-items-center gap-2 flex-wrap" style="min-height:46px;">
                   <template v-if="productoSeleccionado">
-                    <strong class="tabular">{{ existenciaActual }} → {{ existenciaResultante }}</strong>
                     <span v-if="stockInsuficiente" class="badge-ts badge-out">Stock insuficiente</span>
-                    <span v-else-if="quedaraBajoMinimo" class="badge-ts badge-low">Quedará bajo el mínimo</span>
-                    <span v-else class="badge-ts badge-ok">Disponible</span>
+                    <template v-else>
+                      <strong class="tabular">{{ existenciaActual }} → {{ existenciaResultante }}</strong>
+                      <span v-if="quedaraBajoMinimo" class="badge-ts badge-low">Quedará bajo el mínimo</span>
+                      <span v-else class="badge-ts badge-ok">Disponible</span>
+                    </template>
                   </template>
                   <small v-else class="text-muted-2">Seleccione un producto para previsualizar el stock.</small>
                 </div>

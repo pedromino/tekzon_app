@@ -92,11 +92,20 @@ export const ProductoController = {
    */
   async postProducto(req, res) {
     try {
-      const productoCreado = await ProductoService.crearProducto(req.body);
+      const datosProducto = {
+        ...req.body,
+        _id_usuario: req.usuario?.id_usuario
+      };
+
+      const productoCreado = await ProductoService.crearProducto(datosProducto);
+
+      const mensaje = productoCreado.compra
+        ? `Producto "${productoCreado.nombre_producto}" registrado según factura "${productoCreado.compra.num_factura}" del proveedor "${productoCreado.compra.nombre_proveedor}".`
+        : `Producto "${productoCreado.nombre_producto}" registrado con existencia inicial 0.`;
 
       return res.status(201).json({
         exito: true,
-        mensaje: `Producto "${productoCreado.nombre_producto}" registrado con existencia inicial 0.`,
+        mensaje,
         producto: productoCreado
       });
     } catch (error) {

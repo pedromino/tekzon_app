@@ -243,7 +243,7 @@ textarea.form-control { min-height: 96px; }
 .badge-ts::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .badge-ts.no-dot::before { display: none; }
 .badge-ok      { background: #e8f6ee; color: #15803d; }
-.badge-low     { background: #fde8e8; color: var(--color-warning); }
+.badge-low     { background: #ffedd5; color: var(--color-warning); }
 .badge-out     { background: #fde8e8; color: var(--color-danger); }
 .badge-info    { background: #e3f4f7; color: var(--color-info); }
 .badge-neutral { background: var(--surface-soft); color: var(--text-muted); }
@@ -629,6 +629,95 @@ textarea.form-control { min-height: 96px; }
 .img-preview p { margin: 0; font-size: .78rem; color: var(--text-muted); }
 .margin-hint { font-size: .78rem; color: var(--text-muted); }
 .margin-hint strong { color: var(--color-success); }
+
+/* ==========================================================================
+   IMPRESIÓN DE DOCUMENTOS (FACTURAS Y COMPROBANTES)
+   ==========================================================================
+   Reglas compartidas por el módulo de Servicio Técnico y por Venta Directa:
+   al pulsar "Imprimir" (window.print) con un comprobante abierto, el papel
+   debe salir únicamente con la hoja del documento, ocupando sólo las páginas
+   que la hoja necesite y sin páginas en blanco.
+
+   TÉCNICA: el resto de la interfaz NO se oculta con `visibility: hidden`
+   solamente —eso conserva su espacio en el flujo y genera páginas vacías—,
+   sino que se manda fuera del documento con `position: absolute` y
+   `left: -9999px`, de modo que no ocupa alto alguno. La cadena de
+   contenedores del modal abierto vuelve a posición normal y el contenido de
+   su `.modal-body` es la única hoja imprimible.
+   ========================================================================== */
+@media print {
+  /* Papel en blanco puro y documento con altura libre (varias páginas). */
+  html, body {
+    height: auto !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+
+  /* Sólo actúa con un modal abierto (botón "Imprimir" de un comprobante):
+     la interfaz completa sale del flujo sin dejar espacio ni páginas. */
+  body.modal-open * {
+    visibility: hidden !important;
+    position: absolute !important;
+    left: -9999px !important;
+    top: 0 !important;
+  }
+
+  /* La ruta del modal abierto (layout -> página -> modal -> cuerpo) se
+     devuelve al flujo normal: es el único contenido que se imprime. */
+  body.modal-open .app,
+  body.modal-open .main,
+  body.modal-open #contenido,
+  body.modal-open .modal,
+  body.modal-open .modal-dialog,
+  body.modal-open .modal-content,
+  body.modal-open .modal-body,
+  body.modal-open .modal-body * {
+    visibility: visible !important;
+    position: static !important;
+    left: auto !important;
+    top: auto !important;
+  }
+
+  /* El modal deja de ser una capa flotante centrada: pasa a ser papel. */
+  body.modal-open .modal {
+    width: auto !important;
+    height: auto !important;
+    max-width: none !important;
+    margin: 0 !important;
+    background: #fff !important;
+  }
+  body.modal-open .modal-dialog {
+    width: auto !important;
+    max-width: none !important;
+    margin: 0 !important;
+  }
+  body.modal-open .modal-content {
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: #fff !important;
+  }
+
+  /* Cabecera y pie del modal son controles de la aplicación, no documento. */
+  body.modal-open .modal-header,
+  body.modal-open .modal-footer {
+    display: none !important;
+  }
+
+  /* La hoja ocupa todo el ancho de la página, sin relleno ni márgenes del
+     layout (barra lateral, barra superior, contenido y pie de la app). */
+  body.modal-open .app,
+  body.modal-open .main,
+  body.modal-open #contenido,
+  body.modal-open .modal-body {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    min-height: 0 !important;
+  }
+}
+
 
 /* 9. MODALES DE FEEDBACK Y TOASTS ======================================== */
 /* ==========================================================================

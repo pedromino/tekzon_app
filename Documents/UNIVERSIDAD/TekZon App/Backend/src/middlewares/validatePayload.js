@@ -26,9 +26,18 @@
  * ==========================================================================
  */
 
-/** Determina si un valor está vacío (undefined, null, '' o sólo espacios). */
+/**
+ * Determina si un valor está vacío (undefined, null, '' , sólo espacios o un
+ * arreglo sin elementos).
+ *
+ * PROPÓSITO TÉCNICO: el caso ARREGLO es importante para el Módulo de Venta
+ * Directa: un carrito `[]` es técnicamente "un valor presente", pero no
+ * contiene ningún producto que facturar, por lo que debe considerarse ausente y
+ * rechazarse con un 400 explicativo antes de llegar al servicio.
+ */
 const estaVacio = (valor) => {
   if (valor === undefined || valor === null) return true;
+  if (Array.isArray(valor)) return valor.length === 0;
   if (typeof valor === 'string') return valor.trim() === '';
   return false;
 };

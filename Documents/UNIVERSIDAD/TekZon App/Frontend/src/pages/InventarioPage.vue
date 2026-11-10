@@ -37,6 +37,7 @@ import EliminarProductoModal from '../components/EliminarProductoModal.vue';
 import AjusteStockModal from '../components/AjusteStockModal.vue';
 import MovimientoModal from '../components/MovimientoModal.vue';
 import ModalConfirmacion from '../components/ModalConfirmacion.vue';
+import ModalGenerarReporte from '../components/ModalGenerarReporte.vue';
 import ProductoServices from '../services/ProductoServices.js';
 import CategoriaServices from '../services/CategoriaServices.js';
 import MovimientoServices from '../services/MovimientoServices.js';
@@ -121,6 +122,10 @@ const mostrarToast = (titulo, mensaje, tipo = 'success') => {
 
 const cerrarToastPorId = (id) => {
   notificaciones.value = notificaciones.value.filter((toast) => toast.id !== id);
+};
+
+const manejarNotificacionReporte = ({ titulo, mensaje, tipo }) => {
+  mostrarToast(titulo, mensaje, tipo);
 };
 
 /**
@@ -548,9 +553,16 @@ const confirmarMovimiento = async (datosMovimiento) => {
         registro de movimientos sigue disponible desde el botón de cada fila y
         desde el panel de alertas de reposición.
       -->
-      <button class="btn btn-primary" type="button" @click="prepararCreacion">
-        <i class="bi bi-plus-lg"></i> Nuevo producto
-      </button>
+      <div class="d-flex align-items-center gap-2">
+        <button class="btn btn-outline-primary d-flex align-items-center gap-2" type="button" @click="abrirModal('modalReporteProductos')">
+          <i class="bi bi-file-earmark-bar-graph"></i>
+          <span>Generar Reporte</span>
+        </button>
+        <button class="btn btn-primary d-flex align-items-center gap-2" type="button" @click="prepararCreacion">
+          <i class="bi bi-plus-lg"></i>
+          <span>Nuevo producto</span>
+        </button>
+      </div>
     </div>
 
     <!-- ================= ESTADO DE CARGA ================= -->
@@ -913,6 +925,17 @@ const confirmarMovimiento = async (datosMovimiento) => {
       :procesando="mostrarConfirmacionEdicion && procesandoGuardado"
       @confirmar="confirmarEdicionProducto"
       @cancelar="cancelarEdicionProducto"
+    />
+
+    <!-- MODAL DE GENERACIÓN DE REPORTES (PDF / EXCEL / CORREO) -->
+    <ModalGenerarReporte
+      id-modal="modalReporteProductos"
+      tipo-reporte="productos"
+      titulo="Reporte de Inventario y Rentabilidad"
+      subtitulo="Análisis de existencias, márgenes de ganancia, valorización del almacén y alertas de stock."
+      clasificacion="GERENCIAL"
+      :categorias="categorias"
+      @notificar="manejarNotificacionReporte"
     />
   </main>
 </template>
