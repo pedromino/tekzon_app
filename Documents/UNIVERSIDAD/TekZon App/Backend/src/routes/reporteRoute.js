@@ -7,12 +7,12 @@
  */
 import { Router } from 'express';
 import { ReporteController } from '../controllers/reporteController.js';
-import { autenticarToken } from '../middlewares/autenticacionMiddleware.js';
+import { exigirSesion } from '../middlewares/autenticacionMiddleware.js';
 
 const router = Router();
 
 // Todas las operaciones de reporte requieren usuario autenticado
-router.use(autenticarToken);
+router.use(exigirSesion);
 
 router.post('/generar', ReporteController.generarReporte);
 router.get('/datos/:tipo', ReporteController.getDatosReporte);

@@ -98,6 +98,9 @@ export const exigirSesion = async (req, res, siguiente) => {
   }
 };
 
+/** Alias de compatibilidad para autenticación por token */
+export const autenticarToken = exigirSesion;
+
 /**
  * MIDDLEWARE 2 · Exige el rol ADMINISTRADOR (permisos globales).
  * Se declara DESPUÉS de `exigirSesion`, que es quien rellena `req.usuarioAutenticado`.
