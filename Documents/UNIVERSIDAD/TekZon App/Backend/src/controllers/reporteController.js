@@ -116,15 +116,17 @@ export const ReporteController = {
 
       // 3. Caso: Envío por correo electrónico
       if (enviarEmail || Boolean(req.body.enviar_email)) {
-        if (!correoDestino) {
+        const emailLimpio = String(correoDestino || '').trim();
+        const patronEmail = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+        if (!emailLimpio || !patronEmail.test(emailLimpio)) {
           return res.status(400).json({
             exito: false,
-            mensaje: 'Debe ingresar el correo electrónico al cual remitir el reporte.'
+            mensaje: 'Debe ingresar una dirección de correo electrónico válida (ejemplo: usuario@correo.com).'
           });
         }
 
         const resultadoEmail = await EmailReporteService.enviarReportePorEmail({
-          destinatario: correoDestino,
+          destinatario: emailLimpio,
           reporteData,
           bufferArchivo,
           formato: formatoLimpio,
@@ -136,11 +138,12 @@ export const ReporteController = {
           exito: true,
           mensaje: resultadoEmail.mensaje,
           previewUrl: resultadoEmail.previewUrl,
+          esReal: resultadoEmail.esReal,
           reporte: {
             titulo: reporteData.titulo,
             modulo: reporteData.modulo,
             formato: formatoLimpio,
-            destinatario: correoDestino
+            destinatario: emailLimpio
           }
         });
       }

@@ -14,22 +14,42 @@ export const EmailReporteService = {
    * Obtiene o crea un transportador SMTP configurado o de pruebas (Ethereal).
    */
   async obtenerTransportador() {
-    if (process.env.SMTP_HOST && process.env.SMTP_USER) {
-      return nodemailer.createTransport({
-        host: process.env.SMTP_HOST,
-        port: Number(process.env.SMTP_PORT || 587),
-        secure: process.env.SMTP_SECURE === 'true',
-        auth: {
-          user: process.env.SMTP_USER,
-          pass: process.env.SMTP_PASS
-        }
-      });
+    const smtpUser = process.env.SMTP_USER?.trim();
+    const smtpPass = process.env.SMTP_PASS?.trim();
+
+    // Si existen credenciales SMTP configuradas en .env (Gmail, Outlook, Corporativo)
+    if (smtpUser && smtpPass) {
+      const esGmail = smtpUser.toLowerCase().includes('@gmail.com') || process.env.SMTP_SERVICE === 'gmail';
+
+      const config = esGmail
+        ? {
+            service: 'gmail',
+            auth: {
+              user: smtpUser,
+              pass: smtpPass
+            }
+          }
+        : {
+            host: process.env.SMTP_HOST || 'smtp.gmail.com',
+            port: Number(process.env.SMTP_PORT || (process.env.SMTP_SECURE === 'true' ? 465 : 587)),
+            secure: process.env.SMTP_SECURE === 'true' || process.env.SMTP_PORT === '465',
+            auth: {
+              user: smtpUser,
+              pass: smtpPass
+            },
+            tls: {
+              rejectUnauthorized: false
+            }
+          };
+
+      const transportador = nodemailer.createTransport(config);
+      return { transportador, esReal: true, remitente: smtpUser };
     }
 
-    // Si no hay SMTP configurado en producción, genera una cuenta de prueba Ethereal en vivo
+    // Modo sandbox / desarrollo: Ethereal Email con generación de preview web en vivo
     try {
       const testAccount = await nodemailer.createTestAccount();
-      return nodemailer.createTransport({
+      const transportador = nodemailer.createTransport({
         host: 'smtp.ethereal.email',
         port: 587,
         secure: false,
@@ -38,13 +58,15 @@ export const EmailReporteService = {
           pass: testAccount.pass
         }
       });
+      return { transportador, esReal: false, remitente: testAccount.user };
     } catch {
-      // Si no hay acceso a internet para Ethereal, usa transportador simulado para no bloquear
-      return nodemailer.createTransport({
+      // Si no hay acceso a internet para Ethereal, usa transportador simulado en memoria
+      const transportador = nodemailer.createTransport({
         streamTransport: true,
         newline: 'windows',
         buffer: true
       });
+      return { transportador, esReal: false, remitente: 'reportes-sandbox@tekzon.com' };
     }
   },
 
@@ -67,11 +89,12 @@ export const EmailReporteService = {
     nombreArchivo,
     usuarioEmisor = 'Administrador'
   }) {
-    if (!destinatario || !destinatario.includes('@')) {
-      throw new Error('Debe proporcionar un correo electrónico válido.');
+    const patronEmail = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    if (!destinatario || !patronEmail.test(String(destinatario).trim())) {
+      throw new Error('Debe proporcionar una dirección de correo electrónico válida (ejemplo: usuario@correo.com).');
     }
 
-    const transportador = await this.obtenerTransportador();
+    const { transportador, esReal, remitente } = await this.obtenerTransportador();
     const ahora = new Date().toLocaleString('es-VE', { dateStyle: 'medium', timeStyle: 'short' });
     const extension = formato === 'excel' ? 'xlsx' : 'pdf';
     const contentType = formato === 'excel'
@@ -153,7 +176,10 @@ export const EmailReporteService = {
 
     return {
       exito: true,
-      mensaje: `Reporte enviado exitosamente a ${destinatario}`,
+      esReal,
+      mensaje: esReal
+        ? `Reporte entregado exitosamente a la bandeja de ${destinatario}.`
+        : `Reporte generado y emitido. (Modo Sandbox de Pruebas: el correo se procesó con éxito. Para entrega directa a bandejas reales configure SMTP_USER y SMTP_PASS en Backend/.env).`,
       messageId: info.messageId,
       previewUrl: previewUrl || null
     };
