@@ -345,6 +345,11 @@ const unidadesCarrito = computed(() =>
   carritoVenta.value.reduce((suma, linea) => suma + aNumero(linea.cantidad), 0)
 );
 
+/** ¿Hay algún producto en el carrito con cantidad superior a la existencia disponible o inválida? */
+const hayErrorStock = computed(() =>
+  carritoVenta.value.some((linea) => aNumero(linea.cantidad) > aNumero(linea.existencia) || aNumero(linea.cantidad) <= 0)
+);
+
 /**
  * TOTAL DEL CARRITO (REFERENCIA).
  * PROPÓSITO TÉCNICO: es una multiplicación local precio x cantidad sobre el
@@ -408,7 +413,7 @@ const agregarAlCarrito = (producto) => {
 const incrementarCantidad = (linea) => {
   if (aNumero(linea.cantidad) >= aNumero(linea.existencia)) {
     mostrarToast(
-      'Existencia insuficiente',
+      'Existencia máxima alcanzada',
       `No puede vender más de ${linea.existencia} unidad(es) de ${linea.nombre}.`,
       'warning'
     );
@@ -430,29 +435,28 @@ const disminuirCantidad = (linea) => {
 
 /**
  * FIJA LA CANTIDAD ESCRITA A MANO EN EL INPUT.
- * Se valida contra la existencia disponible y se avisa cuando el cajero intenta
- * superarla; el valor se recorta al máximo permitido.
+ * Se valida estrictamente contra la existencia en almacén. Si el usuario intenta
+ * vender más de lo disponible, se conserva el valor ingresado para alertar el error
+ * y se bloquea la facturación para impedir la emisión indebida de facturas sin stock.
  */
 const fijarCantidad = (linea, valorNuevo) => {
   const cantidad = Math.trunc(aNumero(valorNuevo));
   const existencia = aNumero(linea.existencia);
 
-  if (cantidad > existencia) {
-    mostrarToast(
-      'Cantidad ajustada al stock',
-      `${linea.nombre}: sólo hay ${existencia} unidad(es) disponibles.`,
-      'warning'
-    );
-    linea.cantidad = existencia;
-    return;
-  }
-
-  if (cantidad <= 0) {
-    quitarLineaCarrito(linea.codigo);
+  if (isNaN(cantidad) || cantidad <= 0) {
+    linea.cantidad = 1;
     return;
   }
 
   linea.cantidad = cantidad;
+
+  if (cantidad > existencia) {
+    mostrarToast(
+      'Stock insuficiente',
+      `No se puede vender ${cantidad} u. de "${linea.nombre}". Sólo hay ${existencia} u. disponibles en almacén.`,
+      'error'
+    );
+  }
 };
 
 /** Quita una línea completa del carrito. */
@@ -601,12 +605,26 @@ const exigeTasaBcv = computed(() => metodoRequiereTasa(cobroVenta.value.metodoPa
 
 /**
  * ABRE EL MODAL DE COBRO.
- * Antes de abrirlo se comprueba que exista un turno de caja abierto: sin caja
- * el cobro no puede registrarse, porque el pago debe quedar asociado al turno.
+ * Antes de abrirlo se comprueba que exista un turno de caja abierto y que ningún
+ * producto en el carrito supere el stock real en almacén.
  */
 const abrirModalCobro = () => {
   if (carritoVenta.value.length === 0) {
     mostrarToast('Carrito vacío', 'Agregue al menos un producto antes de procesar el cobro.', 'warning');
+    return;
+  }
+
+  // Validación estricta de existencias: bloquea la apertura del modal si se pide más de lo disponible
+  const lineaExcedida = carritoVenta.value.find(
+    (linea) => aNumero(linea.cantidad) > aNumero(linea.existencia)
+  );
+
+  if (lineaExcedida) {
+    mostrarToast(
+      'Stock insuficiente',
+      `No se puede procesar la venta: "${lineaExcedida.nombre}" tiene ${lineaExcedida.cantidad} u. en el carrito pero sólo hay ${lineaExcedida.existencia} u. en almacén.`,
+      'error'
+    );
     return;
   }
 
@@ -631,6 +649,18 @@ const abrirModalCobro = () => {
  */
 const validarCobro = () => {
   const errores = {};
+
+  // 1. Verificación obligatoria de existencias de cada línea
+  for (const linea of carritoVenta.value) {
+    if (aNumero(linea.cantidad) > aNumero(linea.existencia)) {
+      errores.stock = `No se puede facturar "${linea.nombre}": solicitadas ${linea.cantidad} u., pero sólo hay ${linea.existencia} u. en almacén.`;
+      break;
+    }
+    if (aNumero(linea.cantidad) <= 0) {
+      errores.stock = `La cantidad de "${linea.nombre}" debe ser mayor a cero.`;
+      break;
+    }
+  }
 
   const cedula = normalizarCedula(datosCliente.value.cedula);
 
@@ -679,6 +709,20 @@ const mensajeErrorCobro = computed(() => Object.values(erroresCobro.value)[0] ||
  */
 const confirmarCobroVenta = async () => {
   if (enviandoVenta.value) return;
+
+  // Verificación estricta previa a la petición
+  const itemConExceso = carritoVenta.value.find(
+    (linea) => aNumero(linea.cantidad) > aNumero(linea.existencia)
+  );
+
+  if (itemConExceso) {
+    mostrarToast(
+      'Venta rechazada por falta de stock',
+      `"${itemConExceso.nombre}" supera el stock (${itemConExceso.cantidad} solicitadas vs ${itemConExceso.existencia} disponibles). Ajuste la cantidad antes de continuar.`,
+      'error'
+    );
+    return;
+  }
 
   if (!validarCobro()) {
     mostrarToast('Revise el formulario de cobro', mensajeErrorCobro.value, 'warning');
@@ -1066,46 +1110,60 @@ const imprimirFactura = () => {
               </p>
             </div>
 
-            <div v-else class="product-grid">
-              <article v-for="producto in productosFiltrados" :key="producto.codigo" class="product-card">
-                <div class="product-card__media">
-                  <img :src="rutaImagenProducto(producto.imagen)" :alt="producto.nombre">
-                  <span class="badge-ts" :class="estadoStockProducto(producto).clase">
-                    {{ estadoStockProducto(producto).etiqueta }}
-                  </span>
-                  <span class="cat">{{ producto.nombre_categoria }}</span>
-                </div>
-
-                <div class="product-card__body">
-                  <span class="brand">{{ producto.marca || 'Sin marca' }}</span>
-                  <h3>{{ producto.nombre }}</h3>
-                  <span class="code-chip">{{ producto.codigo }}</span>
-
-                  <div class="product-card__price">
-                    <strong>{{ formatearMoneda(producto.precio) }}</strong>
-                    <span>{{ producto.existencia }} u. en almacén</span>
+            <div v-else class="sales-product-grid-wrap" style="max-height: 640px; overflow-y: auto;">
+              <div class="sales-product-grid">
+                <article v-for="producto in productosFiltrados" :key="producto.codigo" class="sales-product-card">
+                  <div class="sales-product-card__media">
+                    <img :src="rutaImagenProducto(producto.imagen)" :alt="producto.nombre">
+                    <span class="badge-ts" :class="estadoStockProducto(producto).clase">
+                      {{ estadoStockProducto(producto).etiqueta }}
+                    </span>
+                    <span class="cat" :title="producto.nombre_categoria">{{ producto.nombre_categoria }}</span>
                   </div>
 
-                  <div class="stock-meter">
-                    <span
-                      :style="{ width: anchoMedidorStock(producto), background: colorMedidorStock(producto) }"
-                    ></span>
-                  </div>
-                  <p class="form-text mb-0">Mínimo {{ producto.minimo }} u.</p>
-                </div>
+                  <div class="sales-product-card__body">
+                    <div class="brand-row">
+                      <span class="brand" :title="producto.marca">{{ producto.marca || 'Genérico' }}</span>
+                      <span class="code-chip">{{ producto.codigo }}</span>
+                    </div>
 
-                <div class="product-card__foot">
-                  <button
-                    class="btn btn-primary btn-sm"
-                    type="button"
-                    :disabled="Number(producto.existencia) <= 0"
-                    @click="agregarAlCarrito(producto)"
-                  >
-                    <i class="bi bi-cart-plus"></i>
-                    {{ Number(producto.existencia) <= 0 ? 'Agotado' : 'Agregar' }}
-                  </button>
-                </div>
-              </article>
+                    <h3 :title="producto.nombre">{{ producto.nombre }}</h3>
+
+                    <div class="sales-product-card__price-row">
+                      <strong>{{ formatearMoneda(producto.precio) }}</strong>
+                      <span
+                        class="badge"
+                        :class="Number(producto.existencia) > 0 ? 'bg-light text-dark border' : 'bg-danger-subtle text-danger border border-danger-subtle'"
+                        style="font-size: 0.72rem;"
+                      >
+                        {{ producto.existencia }} u. en stock
+                      </span>
+                    </div>
+
+                    <div class="stock-meter mt-2">
+                      <span
+                        :style="{ width: anchoMedidorStock(producto), background: colorMedidorStock(producto) }"
+                      ></span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mt-1">
+                      <small class="text-muted-2" style="font-size: 0.7rem;">Mínimo {{ producto.minimo }} u.</small>
+                    </div>
+                  </div>
+
+                  <div class="sales-product-card__foot">
+                    <button
+                      class="btn btn-sm"
+                      :class="Number(producto.existencia) <= 0 ? 'btn-outline-secondary' : 'btn-primary'"
+                      type="button"
+                      :disabled="Number(producto.existencia) <= 0"
+                      @click="agregarAlCarrito(producto)"
+                    >
+                      <i class="bi" :class="Number(producto.existencia) <= 0 ? 'bi-slash-circle' : 'bi-cart-plus'"></i>
+                      {{ Number(producto.existencia) <= 0 ? 'Agotado' : 'Agregar al carrito' }}
+                    </button>
+                  </div>
+                </article>
+              </div>
             </div>
           </div>
         </div>
@@ -1210,52 +1268,88 @@ const imprimirFactura = () => {
                     <div
                       v-for="linea in carritoVenta"
                       :key="linea.codigo"
-                      class="d-flex align-items-center gap-2 py-2"
+                      class="d-flex flex-column py-2 px-1"
+                      :class="{ 'bg-danger-subtle rounded-2 p-2 mb-2 border border-danger-subtle': aNumero(linea.cantidad) > aNumero(linea.existencia) }"
                       style="border-bottom:1px solid var(--border-color);"
                     >
-                      <img
-                        :src="rutaImagenProducto(linea.imagen)"
-                        :alt="linea.nombre"
-                        style="width:42px;height:42px;border-radius:8px;object-fit:cover;flex-shrink:0;"
-                      >
+                      <div class="d-flex align-items-center gap-2">
+                        <img
+                          :src="rutaImagenProducto(linea.imagen)"
+                          :alt="linea.nombre"
+                          style="width:40px;height:40px;border-radius:6px;object-fit:cover;flex-shrink:0;"
+                        >
 
-                      <div class="flex-grow-1" style="min-width:0;">
-                        <strong class="d-block small text-truncate" :title="linea.nombre">{{ linea.nombre }}</strong>
-                        <small class="text-muted-2">
-                          {{ formatearMoneda(linea.precio) }} · disp. {{ linea.existencia }} u.
-                        </small>
+                        <div class="flex-grow-1" style="min-width:0;">
+                          <div class="d-flex justify-content-between align-items-center">
+                            <strong class="d-block small text-truncate" :title="linea.nombre">{{ linea.nombre }}</strong>
+                            <span
+                              class="badge ms-1"
+                              :class="aNumero(linea.cantidad) > aNumero(linea.existencia)
+                                ? 'bg-danger text-white'
+                                : 'bg-light text-dark border'"
+                              style="font-size: 0.68rem;"
+                            >
+                              Stock: {{ linea.existencia }} u.
+                            </span>
+                          </div>
+                          <small class="text-muted-2">
+                            {{ linea.codigo }} · {{ formatearMoneda(linea.precio) }} c/u
+                          </small>
+                        </div>
                       </div>
 
-                      <!-- Control de cantidad: nunca supera la existencia disponible -->
-                      <div class="d-flex align-items-center gap-1">
-                        <button class="btn btn-ghost btn-icon btn-sm" type="button" title="Quitar una unidad" @click="disminuirCantidad(linea)">
-                          <i class="bi bi-dash-lg"></i>
-                        </button>
-                        <input
-                          class="form-control form-control-sm text-center tabular"
-                          type="number"
-                          min="1"
-                          :max="linea.existencia"
-                          style="width:72px;"
-                          :value="linea.cantidad"
-                          aria-label="Cantidad a vender"
-                          @change="fijarCantidad(linea, $event.target.value)"
-                        >
-                        <button class="btn btn-ghost btn-icon btn-sm" type="button" title="Agregar una unidad" @click="incrementarCantidad(linea)">
-                          <i class="bi bi-plus-lg"></i>
-                        </button>
+                      <!-- Fila inferior: Controles de cantidad, subtotal y eliminar -->
+                      <div class="d-flex align-items-center justify-content-between mt-2 pt-1 border-top border-light">
+                        <div class="d-flex align-items-center gap-1">
+                          <button class="btn btn-ghost btn-icon btn-sm" type="button" title="Quitar una unidad" @click="disminuirCantidad(linea)">
+                            <i class="bi bi-dash-lg"></i>
+                          </button>
+                          <input
+                            class="form-control form-control-sm text-center tabular fw-bold"
+                            :class="{
+                              'is-invalid border-danger text-danger bg-white': aNumero(linea.cantidad) > aNumero(linea.existencia)
+                            }"
+                            type="number"
+                            min="1"
+                            style="width:72px;"
+                            :value="linea.cantidad"
+                            aria-label="Cantidad a vender"
+                            @input="fijarCantidad(linea, $event.target.value)"
+                            @change="fijarCantidad(linea, $event.target.value)"
+                          >
+                          <button
+                            class="btn btn-ghost btn-icon btn-sm"
+                            type="button"
+                            title="Agregar una unidad"
+                            :disabled="aNumero(linea.cantidad) >= aNumero(linea.existencia)"
+                            @click="incrementarCantidad(linea)"
+                          >
+                            <i class="bi bi-plus-lg"></i>
+                          </button>
+                        </div>
+
+                        <div class="d-flex align-items-center gap-2">
+                          <strong
+                            class="tabular fs-6"
+                            :class="{ 'text-danger': aNumero(linea.cantidad) > aNumero(linea.existencia) }"
+                          >
+                            {{ formatearMoneda(linea.precio * linea.cantidad) }}
+                          </strong>
+                          <button
+                            class="btn btn-ghost btn-icon btn-sm btn-ghost-danger"
+                            type="button"
+                            title="Quitar del carrito"
+                            @click="quitarLineaCarrito(linea.codigo)"
+                          >
+                            <i class="bi bi-x-lg"></i>
+                          </button>
+                        </div>
                       </div>
 
-                      <div class="text-end" style="min-width:84px;">
-                        <strong class="tabular d-block">{{ formatearMoneda(linea.precio * linea.cantidad) }}</strong>
-                        <button
-                          class="btn btn-ghost btn-icon btn-sm btn-ghost-danger"
-                          type="button"
-                          title="Quitar del carrito"
-                          @click="quitarLineaCarrito(linea.codigo)"
-                        >
-                          <i class="bi bi-x-lg"></i>
-                        </button>
+                      <!-- Alerta visible si supera la existencia -->
+                      <div v-if="aNumero(linea.cantidad) > aNumero(linea.existencia)" class="text-danger small fw-semibold mt-1 d-flex align-items-center gap-1">
+                        <i class="bi bi-exclamation-octagon-fill"></i>
+                        <span>Stock insuficiente: Sólo hay {{ linea.existencia }} u. disponibles en almacén.</span>
                       </div>
                     </div>
                   </div>
@@ -1283,10 +1377,16 @@ const imprimirFactura = () => {
                       </span>
                     </div>
 
+                    <!-- Aviso de error de stock en el carrito -->
+                    <div v-if="hayErrorStock" class="alert alert-danger py-2 px-3 small d-flex align-items-center gap-2 mt-2 mb-0" role="alert">
+                      <i class="bi bi-exclamation-triangle-fill fs-5"></i>
+                      <span>Hay artículos que superan el stock disponible. Ajuste las cantidades antes de cobrar.</span>
+                    </div>
+
                     <button
                       class="btn btn-primary w-100 mt-3"
                       type="button"
-                      :disabled="carritoVenta.length === 0 || enviandoVenta || !cajaActiva"
+                      :disabled="carritoVenta.length === 0 || enviandoVenta || !cajaActiva || hayErrorStock"
                       @click="abrirModalCobro"
                     >
                       <i class="bi bi-cash-coin"></i> Procesar cobro
