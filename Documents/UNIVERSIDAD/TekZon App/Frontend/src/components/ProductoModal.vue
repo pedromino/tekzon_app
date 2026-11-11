@@ -38,6 +38,7 @@
  */
 import { ref, watch, computed, onMounted } from 'vue';
 import CategoriaServices from '../services/CategoriaServices.js';
+import ProveedorServices from '../services/ProveedorServices.js';
 
 const props = defineProps({
   /** Producto a editar (null cuando es un alta nueva). */
@@ -70,7 +71,9 @@ const crearFormularioVacio = () => ({
   precio_venta: 0,
   stock_minimo: 0,
   imagen: 'pantalla.jpg',
-  descripcion: ''
+  descripcion: '',
+  rif_proveedor: '',
+  num_factura: ''
 });
 
 const formulario = ref(crearFormularioVacio());
@@ -89,6 +92,9 @@ const mensajeError = ref('');
 const erroresValidacion = ref({});
 /** Catálogo de categorías activas servido por el CRUD 4. */
 const listaCategorias = ref([]);
+/** Catálogo de proveedores activos para compras. */
+const listaProveedores = ref([]);
+const cargandoProveedores = ref(false);
 
 /** Catálogo de imágenes disponibles en el proyecto (recurso estático). */
 const catalogoImagenes = [
@@ -225,6 +231,20 @@ const cargarCategoriasActivas = async () => {
 };
 
 /**
+ * Consulta los proveedores activos al backend para asociar compras en el alta de productos.
+ */
+const cargarProveedoresActivos = async () => {
+  cargandoProveedores.value = true;
+  try {
+    listaProveedores.value = await ProveedorServices.listarProveedoresActivos();
+  } catch (error) {
+    listaProveedores.value = [];
+  } finally {
+    cargandoProveedores.value = false;
+  }
+};
+
+/**
  * Reinicia el formulario cuando cambia el producto recibido por props.
  * En edición también se recarga el selector de categorías por si el CRUD 4
  * cambió mientras el usuario navegaba entre páginas.
@@ -246,7 +266,9 @@ watch(
         precio_venta: Number(nuevoProducto.precio_venta ?? nuevoProducto.precio ?? 0),
         stock_minimo: Number(nuevoProducto.stock_minimo ?? nuevoProducto.minimo ?? 0),
         imagen: nuevoProducto.imagen || 'pantalla.jpg',
-        descripcion: nuevoProducto.descripcion || ''
+        descripcion: nuevoProducto.descripcion || '',
+        rif_proveedor: '',
+        num_factura: ''
       };
 
       // La existencia proviene de la base de datos: es el valor contra el que
@@ -259,14 +281,16 @@ watch(
       productoActualOriginal.value = null;
       formulario.value = crearFormularioVacio();
       existenciaActual.value = 0;
+      cargarProveedoresActivos();
     }
   },
   { immediate: true }
 );
 
-// Al montar el componente se cargan las categorías desde la base de datos.
+// Al montar el componente se cargan las categorías y proveedores desde la base de datos.
 onMounted(() => {
   cargarCategoriasActivas();
+  cargarProveedoresActivos();
 });
 
 /**
@@ -322,6 +346,16 @@ const validarFormulario = () => {
     errores.stock_minimo = resultadoValidacionMinimo.value.mensaje;
   }
 
+  // Validación de Proveedor y Factura al dar de alta
+  if (!props.esEdicion) {
+    if (!formulario.value.rif_proveedor) {
+      errores.rif_proveedor = 'Seleccione el proveedor al cual se le compró la mercancía.';
+    }
+    if (!String(formulario.value.num_factura || '').trim()) {
+      errores.num_factura = 'Indique el número de factura del proveedor.';
+    }
+  }
+
   erroresValidacion.value = errores;
   return Object.keys(errores).length === 0;
 };
@@ -346,7 +380,9 @@ const enviarFormulario = () => {
     precio_venta: Number(formulario.value.precio_venta),
     stock_minimo: Number(formulario.value.stock_minimo),
     imagen: formulario.value.imagen,
-    descripcion: String(formulario.value.descripcion).trim()
+    descripcion: String(formulario.value.descripcion).trim(),
+    rif_proveedor: String(formulario.value.rif_proveedor || '').trim(),
+    num_factura: String(formulario.value.num_factura || '').trim()
     // Se omite `existencia`: la cantidad física no se captura en el CRUD 1.
   });
 };
@@ -521,6 +557,72 @@ const enviarFormulario = () => {
                   {{ erroresValidacion.stock_minimo }}
                 </div>
                 <div v-else class="form-text">Umbral que activa la alerta de reposición.</div>
+              </div>
+
+              <!-- ============ DATOS DE COMPRA AL PROVEEDOR (SOLO EN ALTA) ============ -->
+              <div v-if="!esEdicion" class="col-12">
+                <div class="p-3 border rounded" style="background-color: #f8fafc;">
+                  <h6 class="fw-bold mb-1 text-primary d-flex align-items-center gap-2" style="font-size: 0.9rem;">
+                    <i class="bi bi-truck"></i> Adquisición de la Mercancía (Proveedor y Factura)
+                  </h6>
+                  <p class="text-muted mb-3" style="font-size: 0.78rem;">
+                    Seleccione a cuál proveedor se le compró el artículo y el número de factura de origen.
+                  </p>
+
+                  <div class="row g-2">
+                    <!-- Selector de Proveedor -->
+                    <div class="col-md-6">
+                      <label class="form-label" for="producto-proveedor">Proveedor*</label>
+                      <div v-if="cargandoProveedores" class="d-flex align-items-center gap-2">
+                        <span class="spinner-border spinner-border-sm text-primary" role="status"></span>
+                        <small class="text-muted">Cargando proveedores...</small>
+                      </div>
+                      <template v-else>
+                        <select
+                          id="producto-proveedor"
+                          class="form-select"
+                          :class="{ 'is-invalid': erroresValidacion.rif_proveedor }"
+                          v-model="formulario.rif_proveedor"
+                          :disabled="cargando"
+                        >
+                          <option value="" disabled>Seleccione un proveedor...</option>
+                          <option
+                            v-for="prov in listaProveedores"
+                            :key="prov.rif"
+                            :value="prov.rif"
+                          >
+                            {{ prov.nombre }} ({{ prov.rif }})
+                          </option>
+                        </select>
+                        <div v-if="erroresValidacion.rif_proveedor" class="invalid-feedback">
+                          {{ erroresValidacion.rif_proveedor }}
+                        </div>
+                        <div v-else-if="listaProveedores.length === 0" class="form-text text-danger">
+                          No hay proveedores activos. Regístrelos primero en el módulo de Proveedores.
+                        </div>
+                      </template>
+                    </div>
+
+                    <!-- Número de Factura del Proveedor -->
+                    <div class="col-md-6">
+                      <label class="form-label" for="producto-factura">N° Factura del Proveedor*</label>
+                      <input
+                        id="producto-factura"
+                        type="text"
+                        class="form-control"
+                        :class="{ 'is-invalid': erroresValidacion.num_factura }"
+                        v-model="formulario.num_factura"
+                        :disabled="cargando"
+                        placeholder="Ej.: FACT-009823"
+                        maxlength="50"
+                      />
+                      <div v-if="erroresValidacion.num_factura" class="invalid-feedback">
+                        {{ erroresValidacion.num_factura }}
+                      </div>
+                      <div v-else class="form-text">Número de factura o comprobante del proveedor.</div>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <!-- ============ VALIDACIÓN DE NEGOCIO: ERROR (bloquea guardado) ============ -->

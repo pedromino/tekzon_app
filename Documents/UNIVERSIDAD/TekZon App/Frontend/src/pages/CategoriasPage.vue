@@ -33,6 +33,7 @@ import LoadingSpinner from '../components/LoadingSpinner.vue';
 import ToastNotificaciones from '../components/ToastNotificaciones.vue';
 import CategoriaModal from '../components/CategoriaModal.vue';
 import ModalConfirmacion from '../components/ModalConfirmacion.vue';
+import ModalGenerarReporte from '../components/ModalGenerarReporte.vue';
 import CategoriaServices from '../services/CategoriaServices.js';
 import ProductoServices from '../services/ProductoServices.js';
 // Utilitario compartido de apertura/cierre de modales de Bootstrap 5.
@@ -85,6 +86,10 @@ const mostrarToast = (titulo, mensaje, tipo = 'success') => {
 
 const cerrarToastPorId = (id) => {
   notificaciones.value = notificaciones.value.filter((toast) => toast.id !== id);
+};
+
+const manejarNotificacionReporte = ({ titulo, mensaje, tipo }) => {
+  mostrarToast(titulo, mensaje, tipo);
 };
 
 /* Esto raduce un error del API a un mensaje con su código HTTP visible. */
@@ -367,9 +372,16 @@ const detalleConfirmacion = computed(() => {
           Clasificación de repuestos, accesorios y equipos.
         </p>
       </div>
-      <button class="btn btn-primary" type="button" @click="prepararCreacion">
-        <i class="bi bi-plus-lg"></i> Nueva categoría
-      </button>
+      <div class="d-flex align-items-center gap-2">
+        <button class="btn btn-outline-primary d-flex align-items-center gap-2" type="button" @click="abrirModal('modalReporteCategorias')">
+          <i class="bi bi-file-earmark-bar-graph"></i>
+          <span>Generar Reporte</span>
+        </button>
+        <button class="btn btn-primary d-flex align-items-center gap-2" type="button" @click="prepararCreacion">
+          <i class="bi bi-plus-lg"></i>
+          <span>Nueva categoría</span>
+        </button>
+      </div>
     </div>
 
     <!-- ================= ESTADO DE CARGA ================= -->
@@ -605,6 +617,16 @@ const detalleConfirmacion = computed(() => {
       :procesando="procesandoCambioEstado"
       @confirmar="confirmarCambioEstadoCategoria"
       @cancelar="cancelarCambioEstado"
+    />
+
+    <!-- MODAL DE GENERACIÓN DE REPORTES (PDF / EXCEL / CORREO) -->
+    <ModalGenerarReporte
+      id-modal="modalReporteCategorias"
+      tipo-reporte="categorias"
+      titulo="Reporte de Distribución y Capital por Categoría"
+      subtitulo="Análisis de inventario valorizado, unidades en almacén y participación porcentual por categoría."
+      clasificacion="SUPERVISION"
+      @notificar="manejarNotificacionReporte"
     />
   </main>
 </template>

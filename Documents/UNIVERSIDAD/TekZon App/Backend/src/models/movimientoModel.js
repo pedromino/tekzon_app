@@ -37,6 +37,26 @@ export const TIPOS_MOVIMIENTO = Object.freeze({
 });
 
 /**
+ * ORÍGENES del movimiento: indican QUÉ PROCESO provocó la transacción.
+ *
+ * PROPÓSITO FUNCIONAL: el requisito del sistema exige marcar las salidas de
+ * inventario como "Venta" o como "Servicio Técnico", según el módulo que las
+ * generó. Se usa una columna dedicada e indexada (`movimiento_inventario.origen`)
+ * en lugar de sobrecargar el texto libre del `motivo`.
+ *
+ *   ALMACEN          -> Entrada/Salida manual del CRUD 3 (FASE I).
+ *   VENTA            -> Descuento automático del Módulo de Venta Directa.
+ *   SERVICIO_TECNICO -> Descuento automático del repuesto de una orden.
+ *   AJUSTE           -> Arqueo físico del CRUD 2 (FASE I).
+ */
+export const ORIGENES_MOVIMIENTO = Object.freeze({
+  ALMACEN: 'ALMACEN',
+  VENTA: 'VENTA',
+  SERVICIO_TECNICO: 'SERVICIO_TECNICO',
+  AJUSTE: 'AJUSTE'
+});
+
+/**
  * Lista de columnas del kádex enriquecida con los datos legibles del producto
  * y del usuario responsable. Se reutiliza en todas las lecturas.
  */
@@ -55,6 +75,7 @@ const COLUMNAS_KARDEX = `
   m.existencia_previa,
   m.existencia_posterior,
   m.motivo,
+  m.origen,
   m.fecha_movimiento
 `;
 
@@ -207,8 +228,10 @@ export const MovimientoModel = {
    * @param {string} datosMovimiento.tipo_movimiento ENTRADA | SALIDA
    * @param {number} datosMovimiento.cantidad       Unidades (entero positivo)
    * @param {string} datosMovimiento.motivo         Justificación obligatoria
+   * @param {string} [datosMovimiento.origen]       Proceso que lo generó
+   *   (ALMACEN por defecto en la captura manual del CRUD 3).
    */
-  async registrarMovimiento({ cod_producto, id_usuario, tipo_movimiento, cantidad, motivo }) {
+  async registrarMovimiento({ cod_producto, id_usuario, tipo_movimiento, cantidad, motivo, origen }) {
     // Conexión dedicada: la transacción debe ejecutarse íntegra en el mismo
     // hilo de conexión del pool.
     const conexion = await pool.getConnection();
@@ -260,8 +283,8 @@ export const MovimientoModel = {
       const [resultadoMovimiento] = await conexion.query(
         `INSERT INTO movimiento_inventario
            (cod_producto, id_usuario, tipo_movimiento, cantidad,
-            existencia_previa, existencia_posterior, motivo)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            existencia_previa, existencia_posterior, motivo, origen, fecha_movimiento)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
         [
           cod_producto,
           id_usuario,
@@ -269,7 +292,8 @@ export const MovimientoModel = {
           cantidad,
           existenciaPrevia,
           existenciaPosterior,
-          motivo
+          motivo,
+          origen || ORIGENES_MOVIMIENTO.ALMACEN
         ]
       );
 
@@ -285,7 +309,8 @@ export const MovimientoModel = {
         cantidad,
         existencia_previa: existenciaPrevia,
         existencia_posterior: existenciaPosterior,
-        motivo
+        motivo,
+        origen: origen || ORIGENES_MOVIMIENTO.ALMACEN
       };
     } catch (error) {
       // Rollback total: ni el stock ni el asiento pueden quedar a medias.
@@ -376,8 +401,8 @@ export const MovimientoModel = {
         const [resultadoMovimiento] = await conexion.query(
           `INSERT INTO movimiento_inventario
              (cod_producto, id_usuario, tipo_movimiento, cantidad,
-              existencia_previa, existencia_posterior, motivo)
-           VALUES (?, ?, 'AJUSTE', ?, ?, ?, ?)`,
+              existencia_previa, existencia_posterior, motivo, origen, fecha_movimiento)
+           VALUES (?, ?, 'AJUSTE', ?, ?, ?, ?, 'AJUSTE', CURRENT_TIMESTAMP)`,
           [
             cod_producto,
             id_usuario,
@@ -429,5 +454,269 @@ export const MovimientoModel = {
     );
 
     return filas.length > 0;
+  },
+
+  /* ========================================================================
+   * BLOQUE TRANSACCIONAL COMPARTIDO POR LOS MÓDULOS DE VENTA Y SERVICIO
+   * ========================================================================
+   * Los dos métodos que siguen son la CLAVE de la integración entre los
+   * módulos nuevos y el inventario. Se diseñaron para ejecutarse DENTRO de una
+   * transacción ya abierta por el módulo llamador (Venta Directa o Servicio
+   * Técnico), de modo que el descuento de stock, el asiento del kádex y la
+   * factura viajen en un ÚNICO COMMIT.
+   *
+   * ¿POR QUÉ ES TAN IMPORTANTE?
+   *   Si el stock se descontara con una transacción propia y luego fallara la
+   *   inserción de la factura, el almacén quedaría descuadrado sin documento
+   *   que lo justifique. Al compartir la transacción, la regla "no existe stock
+   *   sin asiento ni asiento sin documento" se cumple siempre.
+   * ======================================================================== */
+
+  /**
+   * DESCUENTA STOCK DE UN PRODUCTO DENTRO DE UNA TRANSACCIÓN EN CURSO.
+   *
+   * PROPÓSITO FUNCIONAL:
+   *   Resta unidades de la existencia física y deja el asiento de SALIDA en el
+   *   kádex, marcando el ORIGEN que corresponda:
+   *     · 'VENTA'            -> lo invoca el Módulo de Venta Directa.
+   *     · 'SERVICIO_TECNICO' -> lo invoca el consumo de repuestos del técnico.
+   *
+   * PROPÓSITO TÉCNICO:
+   *   1. `SELECT ... FOR UPDATE` bloquea la fila del producto: si dos cajeros
+   *      venden el último artículo al mismo tiempo, la segunda transacción
+   *      espera, relee la existencia ya descontada y detecta el faltante.
+   *   2. No abre ni cierra transacción: usa la `conexion` recibida.
+   *   3. Nunca lanza excepción por stock insuficiente: DEVUELVE el resultado
+   *      para que el servicio llamador decida el mensaje y haga el ROLLBACK.
+   *
+   * @param {Object} conexion       Conexión con BEGIN TRANSACTION activo.
+   * @param {Object} datosDescuento
+   * @param {string} datosDescuento.cod_producto    Producto a descontar.
+   * @param {number} datosDescuento.cantidad        Unidades (entero > 0).
+   * @param {number} datosDescuento.id_usuario      Usuario que firma el asiento.
+   * @param {string} datosDescuento.motivo          Concepto del asiento.
+   * @param {string} datosDescuento.origen          VENTA | SERVICIO_TECNICO.
+   * @param {boolean} [datosDescuento.exigirActivo] Si es true, rechaza
+   *   productos dados de baja lógica.
+   * @returns {Promise<Object>} Resultado del descuento con la traza de stock.
+   */
+  async descontarStockProducto(conexion, {
+    cod_producto,
+    cantidad,
+    id_usuario,
+    motivo,
+    origen,
+    exigirActivo = true
+  }) {
+    // ---- 1. Bloqueo pesimista de la fila del producto ----
+    const [filasProducto] = await conexion.query(
+      `SELECT cod_producto, nombre_producto, existencia, stock_minimo, estado
+         FROM producto
+        WHERE cod_producto = ?
+        FOR UPDATE`,
+      [cod_producto]
+    );
+
+    // El producto no existe en el catálogo.
+    if (filasProducto.length === 0) {
+      return { encontrado: false, stockInsuficiente: false };
+    }
+
+    const producto = filasProducto[0];
+
+    // El producto fue dado de baja lógica y no admite movimientos de almacén.
+    if (exigirActivo && Number(producto.estado) !== 1) {
+      return {
+        encontrado: true,
+        inactivo: true,
+        cod_producto,
+        nombre_producto: producto.nombre_producto
+      };
+    }
+
+    const existenciaPrevia = Number(producto.existencia);
+    const existenciaPosterior = existenciaPrevia - Number(cantidad);
+
+    // ---- 2. Regla de oro: no se puede entregar lo que no hay ----
+    if (existenciaPosterior < 0) {
+      return {
+        encontrado: true,
+        stockInsuficiente: true,
+        cod_producto,
+        nombre_producto: producto.nombre_producto,
+        existenciaDisponible: existenciaPrevia,
+        cantidadSolicitada: Number(cantidad)
+      };
+    }
+
+    // ---- 3. Se actualiza la existencia física real ----
+    await conexion.query(
+      'UPDATE producto SET existencia = ? WHERE cod_producto = ?',
+      [existenciaPosterior, cod_producto]
+    );
+
+    // ---- 4. Se inserta el asiento de SALIDA en el kádex ----
+    const [resultadoAsiento] = await conexion.query(
+      `INSERT INTO movimiento_inventario
+         (cod_producto, id_usuario, tipo_movimiento, cantidad,
+          existencia_previa, existencia_posterior, motivo, origen, fecha_movimiento)
+       VALUES (?, ?, 'SALIDA', ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+      [
+        cod_producto,
+        id_usuario,
+        Number(cantidad),
+        existenciaPrevia,
+        existenciaPosterior,
+        motivo,
+        origen
+      ]
+    );
+
+    return {
+      encontrado: true,
+      stockInsuficiente: false,
+      inactivo: false,
+      id_movimiento: resultadoAsiento.insertId,
+      cod_producto,
+      nombre_producto: producto.nombre_producto,
+      cantidad: Number(cantidad),
+      existencia_previa: existenciaPrevia,
+      existencia_posterior: existenciaPosterior,
+      // Se devuelve el mínimo para que el servicio evalúe la ALERTA sin
+      // necesidad de una segunda consulta a la tabla `producto`.
+      stock_minimo: Number(producto.stock_minimo),
+      origen
+    };
+  },
+
+  /**
+   * DEVUELVE AL INVENTARIO UN REPUESTO PREVIAMENTE DESCONTADO.
+   *
+   * PROPÓSITO FUNCIONAL: se usa cuando el técnico elimina un repuesto de la
+   * orden antes de cobrarla: el repuesto vuelve al estante y queda auditado con
+   * una ENTRADA de origen 'SERVICIO_TECNICO' (así el kádex explica tanto la
+   * salida como su reverso). Si la orden ya fue COBRADA no se permite devolver,
+   * porque la factura ya fue emitida (esa regla la aplica el servicio).
+   *
+   * @param {Object} conexion Conexión con transacción activa.
+   */
+  async devolverStockProducto(conexion, {
+    cod_producto,
+    cantidad,
+    id_usuario,
+    motivo,
+    origen = ORIGENES_MOVIMIENTO.SERVICIO_TECNICO
+  }) {
+    const [filasProducto] = await conexion.query(
+      `SELECT cod_producto, nombre_producto, existencia, stock_minimo
+         FROM producto
+        WHERE cod_producto = ?
+        FOR UPDATE`,
+      [cod_producto]
+    );
+
+    if (filasProducto.length === 0) {
+      return { encontrado: false };
+    }
+
+    const producto = filasProducto[0];
+    const existenciaPrevia = Number(producto.existencia);
+    const existenciaPosterior = existenciaPrevia + Number(cantidad);
+
+    // 1) Se repone la existencia física.
+    await conexion.query(
+      'UPDATE producto SET existencia = ? WHERE cod_producto = ?',
+      [existenciaPosterior, cod_producto]
+    );
+
+    // 2) Se audita la devolución como ENTRADA en el kádex.
+    const [resultadoAsiento] = await conexion.query(
+      `INSERT INTO movimiento_inventario
+         (cod_producto, id_usuario, tipo_movimiento, cantidad,
+          existencia_previa, existencia_posterior, motivo, origen, fecha_movimiento)
+       VALUES (?, ?, 'ENTRADA', ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+      [
+        cod_producto,
+        id_usuario,
+        Number(cantidad),
+        existenciaPrevia,
+        existenciaPosterior,
+        motivo,
+        origen
+      ]
+    );
+
+    return {
+      encontrado: true,
+      id_movimiento: resultadoAsiento.insertId,
+      cod_producto,
+      nombre_producto: producto.nombre_producto,
+      cantidad: Number(cantidad),
+      existencia_previa: existenciaPrevia,
+      existencia_posterior: existenciaPosterior
+    };
+  },
+
+  /**
+   * TOMA EL SIGUIENTE CORRELATIVO DE UNA SECUENCIA (facturas / órdenes).
+   *
+   * PROPÓSITO FUNCIONAL: genera números legibles y consecutivos del tipo
+   *   FAC-000001  (factura de venta directa o de servicio técnico)
+   *   OS-000001   (orden de servicio técnico)
+   *
+   * PROPÓSITO TÉCNICO:
+   *   El correlativo vive en la tabla `secuencia_factura` y se incrementa con
+   *   `UPDATE ... SET valor_actual = valor_actual + 1` DENTRO de la transacción
+   *   del documento. El `UPDATE` bloquea la fila, por lo que dos cajeros que
+   *   facturen simultáneamente obtienen números DISTINTOS y consecutivos: no
+   *   puede repetirse el número de factura (que es llave primaria de `venta`).
+   *
+   * @param {Object} conexion         Conexión con transacción activa.
+   * @param {string} nombreSecuencia  'FACTURA' | 'ORDEN'
+   * @returns {Promise<string>}       Número formateado con 6 dígitos.
+   */
+  async tomarSiguienteCorrelativo(conexion, nombreSecuencia) {
+    // 1) Lectura previa con bloqueo pesimista
+    const [filas] = await conexion.query(
+      'SELECT prefijo, valor_actual FROM secuencia_factura WHERE nombre_secuencia = ? FOR UPDATE',
+      [nombreSecuencia]
+    );
+
+    if (filas.length === 0) {
+      throw new Error(`No existe la secuencia "${nombreSecuencia}" en la base de datos.`);
+    }
+
+    let { prefijo, valor_actual: valorActual } = filas[0];
+
+    // Salvaguarda: garantiza que el nuevo correlativo sea estrictamente mayor
+    // a cualquier registro ya persistido en la base de datos para evitar colisiones.
+    if (nombreSecuencia === 'ORDEN') {
+      const [maxFila] = await conexion.query(
+        "SELECT MAX(CAST(SUBSTRING(id_ordentec, 4) AS UNSIGNED)) AS max_val FROM orden_tecnico WHERE id_ordentec LIKE 'OS-%'"
+      );
+      const maxVal = Number(maxFila[0]?.max_val || 0);
+      if (maxVal > valorActual) {
+        valorActual = maxVal;
+      }
+    } else if (nombreSecuencia === 'FACTURA') {
+      const [maxFila] = await conexion.query(
+        "SELECT MAX(CAST(SUBSTRING(num_factura, 5) AS UNSIGNED)) AS max_val FROM venta WHERE num_factura LIKE 'FAC-%'"
+      );
+      const maxVal = Number(maxFila[0]?.max_val || 0);
+      if (maxVal > valorActual) {
+        valorActual = maxVal;
+      }
+    }
+
+    // 2) Incremento atómico del contador
+    valorActual += 1;
+
+    await conexion.query(
+      'UPDATE secuencia_factura SET valor_actual = ? WHERE nombre_secuencia = ?',
+      [valorActual, nombreSecuencia]
+    );
+
+    // 3) Formato final: prefijo + 6 dígitos rellenados con ceros.
+    return `${prefijo}${String(valorActual).padStart(6, '0')}`;
   }
 };

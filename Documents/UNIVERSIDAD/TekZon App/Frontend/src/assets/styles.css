@@ -243,7 +243,7 @@ textarea.form-control { min-height: 96px; }
 .badge-ts::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 .badge-ts.no-dot::before { display: none; }
 .badge-ok      { background: #e8f6ee; color: #15803d; }
-.badge-low     { background: #fde8e8; color: var(--color-warning); }
+.badge-low     { background: #ffedd5; color: var(--color-warning); }
 .badge-out     { background: #fde8e8; color: var(--color-danger); }
 .badge-info    { background: #e3f4f7; color: var(--color-info); }
 .badge-neutral { background: var(--surface-soft); color: var(--text-muted); }
@@ -453,6 +453,7 @@ textarea.form-control { min-height: 96px; }
   display: flex; align-items: center; gap: 1rem;
   padding: 0 1.75rem;
   background: rgba(255, 255, 255, .92);
+  -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--border-color);
 }
@@ -567,7 +568,7 @@ textarea.form-control { min-height: 96px; }
 
 .product-grid {
   display: grid; gap: 1.1rem;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
   padding: 1.25rem;
 }
 .product-card {
@@ -580,11 +581,13 @@ textarea.form-control { min-height: 96px; }
 .product-card__media { position: relative; aspect-ratio: 4 / 3; background: #edf3f5; overflow: hidden; }
 .product-card__media img { width: 100%; height: 100%; object-fit: cover; transition: transform 400ms ease; }
 .product-card:hover .product-card__media img { transform: scale(1.04); }
-.product-card__media .badge-ts { position: absolute; top: .65rem; left: .65rem; box-shadow: var(--shadow-sm); }
+.product-card__media .badge-ts { position: absolute; top: .65rem; left: .65rem; box-shadow: var(--shadow-sm); z-index: 2; }
 .product-card__media .cat {
   position: absolute; top: .65rem; right: .65rem;
   font-size: .68rem; font-weight: 600; padding: .25rem .55rem; border-radius: 6px;
   background: rgba(16, 42, 67, .72); color: #fff;
+  max-width: 48%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  z-index: 2;
 }
 .product-card__body { padding: .9rem 1rem .5rem; flex: 1; }
 .product-card__body h3 { font-family: var(--font-body); font-weight: 600; font-size: .92rem; letter-spacing: 0; margin: .35rem 0 .2rem; line-height: 1.3; }
@@ -596,6 +599,138 @@ textarea.form-control { min-height: 96px; }
 .stock-meter > span { display: block; height: 100%; border-radius: 4px; }
 .product-card__foot { display: flex; gap: .5rem; padding: .75rem 1rem 1rem; }
 .product-card__foot .btn { flex: 1; }
+
+/* Vitrina de Ventas Directas (Tarjetas compactas, no cortadas y visualmente equilibradas) */
+.sales-product-grid {
+  display: grid;
+  gap: 0.95rem;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  padding: 0.85rem;
+}
+.sales-product-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: #ffffff;
+  overflow: hidden;
+  transition: transform 200ms ease, box-shadow 200ms ease, border-color 200ms ease;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+}
+.sales-product-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.09);
+  border-color: #7dd3fc;
+}
+.sales-product-card__media {
+  position: relative;
+  height: 115px;
+  background: #f8fafc;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.sales-product-card__media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 300ms ease;
+}
+.sales-product-card:hover .sales-product-card__media img {
+  transform: scale(1.05);
+}
+.sales-product-card__media .badge-ts {
+  position: absolute;
+  top: 0.45rem;
+  left: 0.45rem;
+  font-size: 0.7rem;
+  padding: 0.2rem 0.5rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  z-index: 2;
+}
+.sales-product-card__media .cat {
+  position: absolute;
+  top: 0.45rem;
+  right: 0.45rem;
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  background: rgba(12, 74, 110, 0.85);
+  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
+  color: #ffffff;
+  max-width: 50%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  z-index: 2;
+}
+.sales-product-card__body {
+  padding: 0.75rem 0.85rem 0.45rem;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.sales-product-card__body .brand-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  margin-bottom: 0.25rem;
+}
+.sales-product-card__body .brand {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 60%;
+}
+.sales-product-card__body h3 {
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1.25;
+  margin: 0.15rem 0 0.4rem;
+  display: -webkit-box;
+  display: box;
+  -webkit-box-orient: vertical;
+  box-orient: vertical;
+  line-clamp: 2;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  min-height: 2.2em;
+  color: var(--text-main);
+}
+.sales-product-card__price-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  margin-top: auto;
+  padding-top: 0.35rem;
+}
+.sales-product-card__price-row strong {
+  font-size: 1.1rem;
+  color: var(--brand-primary);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.sales-product-card__foot {
+  padding: 0.45rem 0.85rem 0.85rem;
+}
+.sales-product-card__foot .btn {
+  width: 100%;
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 0.38rem 0.6rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+}
 
 .pager { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; padding: 1rem 1.25rem; border-top: 1px solid var(--border-color); }
 .pager p { margin: 0; font-size: .8rem; color: var(--text-muted); }
@@ -629,6 +764,95 @@ textarea.form-control { min-height: 96px; }
 .img-preview p { margin: 0; font-size: .78rem; color: var(--text-muted); }
 .margin-hint { font-size: .78rem; color: var(--text-muted); }
 .margin-hint strong { color: var(--color-success); }
+
+/* ==========================================================================
+   IMPRESIÓN DE DOCUMENTOS (FACTURAS Y COMPROBANTES)
+   ==========================================================================
+   Reglas compartidas por el módulo de Servicio Técnico y por Venta Directa:
+   al pulsar "Imprimir" (window.print) con un comprobante abierto, el papel
+   debe salir únicamente con la hoja del documento, ocupando sólo las páginas
+   que la hoja necesite y sin páginas en blanco.
+
+   TÉCNICA: el resto de la interfaz NO se oculta con `visibility: hidden`
+   solamente —eso conserva su espacio en el flujo y genera páginas vacías—,
+   sino que se manda fuera del documento con `position: absolute` y
+   `left: -9999px`, de modo que no ocupa alto alguno. La cadena de
+   contenedores del modal abierto vuelve a posición normal y el contenido de
+   su `.modal-body` es la única hoja imprimible.
+   ========================================================================== */
+@media print {
+  /* Papel en blanco puro y documento con altura libre (varias páginas). */
+  html, body {
+    height: auto !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+
+  /* Sólo actúa con un modal abierto (botón "Imprimir" de un comprobante):
+     la interfaz completa sale del flujo sin dejar espacio ni páginas. */
+  body.modal-open * {
+    visibility: hidden !important;
+    position: absolute !important;
+    left: -9999px !important;
+    top: 0 !important;
+  }
+
+  /* La ruta del modal abierto (layout -> página -> modal -> cuerpo) se
+     devuelve al flujo normal: es el único contenido que se imprime. */
+  body.modal-open .app,
+  body.modal-open .main,
+  body.modal-open #contenido,
+  body.modal-open .modal,
+  body.modal-open .modal-dialog,
+  body.modal-open .modal-content,
+  body.modal-open .modal-body,
+  body.modal-open .modal-body * {
+    visibility: visible !important;
+    position: static !important;
+    left: auto !important;
+    top: auto !important;
+  }
+
+  /* El modal deja de ser una capa flotante centrada: pasa a ser papel. */
+  body.modal-open .modal {
+    width: auto !important;
+    height: auto !important;
+    max-width: none !important;
+    margin: 0 !important;
+    background: #fff !important;
+  }
+  body.modal-open .modal-dialog {
+    width: auto !important;
+    max-width: none !important;
+    margin: 0 !important;
+  }
+  body.modal-open .modal-content {
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    background: #fff !important;
+  }
+
+  /* Cabecera y pie del modal son controles de la aplicación, no documento. */
+  body.modal-open .modal-header,
+  body.modal-open .modal-footer {
+    display: none !important;
+  }
+
+  /* La hoja ocupa todo el ancho de la página, sin relleno ni márgenes del
+     layout (barra lateral, barra superior, contenido y pie de la app). */
+  body.modal-open .app,
+  body.modal-open .main,
+  body.modal-open #contenido,
+  body.modal-open .modal-body {
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    min-height: 0 !important;
+  }
+}
+
 
 /* 9. MODALES DE FEEDBACK Y TOASTS ======================================== */
 /* ==========================================================================
@@ -961,6 +1185,7 @@ body.modal-open {
   top: 0;
   z-index: 1010;
   background: rgba(255, 255, 255, .95);
+  -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--border-color);
 }
