@@ -1,5 +1,5 @@
 # TEKZON C.A. · SISTEMA DE GESTIÓN TÉCNICA, INVENTARIO Y FACTURACIÓN
-## MINI INFORME TÉCNICO DE LOS REPORTES DEL SISTEMA
+## INFORME TÉCNICO DE LOS REPORTES DEL SISTEMA
 ### EVALUACIÓN FINAL DEL PROYECTO
 
 ---
@@ -8,8 +8,6 @@
 **Sistema:** Sistema Integral de Gestión Técnica, Control de Inventario y Facturación en Mostrador  
 **Arquitectura:** Node.js (ESM) + Express + MySQL / Vue 3 + Vite + Bootstrap 5  
 **Fecha:** Noviembre 2026  
-**Puntuación Evaluada:** 40 Puntos (Mini Informe Técnico de Justificación Gerencial) + 30 Puntos (Motor de Reportes con Criterio) + 15 Puntos (Módulos de Alcance) + 15 Puntos (Rama master lista para Producción y Seeds)
-
 ---
 
 ## 1. INTRODUCCIÓN Y ARQUITECTURA DEL MOTOR DE REPORTES
