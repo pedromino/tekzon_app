@@ -10,19 +10,19 @@
  *   filtros por tipo de movimiento, producto y rango de fechas, además del
  *   botón para registrar una nueva Entrada o Salida física.
  
- *   - PUREZA DE DATOS: la tabla se alimenta exclusivamente de
+ *      la tabla se alimenta exclusivamente de
  *     `MovimientoServices.listarMovimientos()`, que consulta la tabla
  *     `movimiento_inventario` de la base `tekzon_bd`. Cero filas simuladas.
- *   - Los filtros se envían como parámetros de consulta al backend (no se
+ *      Los filtros se envían como parámetros de consulta al backend (no se
  *     filtran en memoria), de modo que el historial siempre refleja la verdad
  *     almacenada y respeta el límite de filas.
- *   - Implementa los 3 estados de UI:
+ *      Implementa los 3 estados de UI:
  *       CARGANDO -> `LoadingSpinner`.
  *       ÉXITO    -> Toast con la traza "existencia previa -> posterior".
  *       ERROR    -> Toast con el código HTTP (400 filtro inválido, 404,
  *                   500) y panel de error persistente con "Reintentar".
- *   - El botón de envío del modal queda `:disabled` durante el POST.
- *   - La lista de productos para el filtro proviene del CRUD 1, lo que
+ *    El botón de envío del modal queda `:disabled` durante el POST.
+ *    La lista de productos para el filtro proviene del CRUD 1, lo que
  *     evidencia la interconexión entre los módulos.
  * ==========================================================================
  */
@@ -30,8 +30,10 @@ import { ref, computed, onMounted } from 'vue';
 import LoadingSpinner from '../components/LoadingSpinner.vue';
 import ToastNotificaciones from '../components/ToastNotificaciones.vue';
 import MovimientoModal from '../components/MovimientoModal.vue';
+import ModalGenerarReporte from '../components/ModalGenerarReporte.vue';
 import MovimientoServices from '../services/MovimientoServices.js';
 import ProductoServices from '../services/ProductoServices.js';
+import { formatearFecha } from '../services/formato.js';
 // Utilitario compartido de apertura/cierre de modales de Bootstrap 5.
 import { abrirModal, cerrarModal } from '../utils/utilidadesModales.js';
 
@@ -83,6 +85,10 @@ const cerrarToastPorId = (id) => {
   notificaciones.value = notificaciones.value.filter((toast) => toast.id !== id);
 };
 
+const manejarNotificacionReporte = ({ titulo, mensaje, tipo }) => {
+  mostrarToast(titulo, mensaje, tipo);
+};
+
 /** Traduce un error del API a un mensaje con su código HTTP visible. */
 const describirError = (error) => {
   const codigo = error?.codigoHttp ?? 500;
@@ -114,16 +120,6 @@ const describirError = (error) => {
 //  que los botones parecieran "no hacer nada".)
 // ---------------------------------------------------------------------------
 
-// ==========================================================================
-// CARGA DE DATOS DESDE EL BACKEND (CERO DATOS SIMULADOS)
-// ==========================================================================
-/**
- * CARGA EL Historial CON LOS FILTROS ACTIVOS.
- *
- * PROPÓSITO TÉCNICO: cada filtro viaja al backend como query string y la
- * consulta SQL se parametriza en `movimientoModel`, evitando filtrar en
- * memoria y garantizando que la información mostrada sea la de la base.
- */
 const cargarKardex = async () => {
   cargandoFiltro.value = true;
   mensajeErrorCarga.value = '';
@@ -269,21 +265,6 @@ const movimientosFiltrados = computed(() => {
 // ==========================================================================
 // UTILIDADES DE PRESENTACIÓN
 // ==========================================================================
-/** Formatea una fecha ISO de MySQL al formato local venezolano. */
-const formatearFecha = (fecha) => {
-  if (!fecha) return '—';
-
-  const objetoFecha = new Date(fecha);
-  if (Number.isNaN(objetoFecha.getTime())) return '—';
-
-  return objetoFecha.toLocaleString('es-VE', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  });
-};
 
 /**
  * Devuelve la configuración visual de cada tipo de movimiento.
@@ -371,9 +352,16 @@ const confirmarMovimiento = async (datosMovimiento) => {
           Toda transacción exige una justificación.
         </p>
       </div>
-      <button class="btn btn-primary" type="button" @click="prepararMovimiento(null)">
-        <i class="bi bi-plus-lg"></i> Registrar entrada / salida
-      </button>
+      <div class="d-flex align-items-center gap-2">
+        <button class="btn btn-outline-primary d-flex align-items-center gap-2" type="button" @click="abrirModal('modalReporteMovimientos')">
+          <i class="bi bi-file-earmark-bar-graph"></i>
+          <span>Generar Reporte</span>
+        </button>
+        <button class="btn btn-primary d-flex align-items-center gap-2" type="button" @click="prepararMovimiento(null)">
+          <i class="bi bi-plus-lg"></i>
+          <span>Registrar entrada / salida</span>
+        </button>
+      </div>
     </div>
 
     <!-- ================= ESTADO DE CARGA ================= -->
@@ -596,6 +584,16 @@ const confirmarMovimiento = async (datosMovimiento) => {
       :cargando="procesandoMovimiento"
       @guardar="confirmarMovimiento"
       @cerrar="cerrarModal('movimientoModal')"
+    />
+
+    <!-- MODAL DE GENERACIÓN DE REPORTES (PDF / EXCEL / CORREO) -->
+    <ModalGenerarReporte
+      id-modal="modalReporteMovimientos"
+      tipo-reporte="movimientos"
+      titulo="Reporte Operacional de Kárdex y Auditoría de Movimientos"
+      subtitulo="Auditoría de ingresos, salidas y ajustes de almacén con detalle de responsable y justificación."
+      clasificacion="OPERACIONAL"
+      @notificar="manejarNotificacionReporte"
     />
   </main>
 </template>

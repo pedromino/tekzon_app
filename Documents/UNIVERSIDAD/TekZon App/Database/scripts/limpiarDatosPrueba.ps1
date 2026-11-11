@@ -1,61 +1,63 @@
 <#
 .SYNOPSIS
-    Limpia los registros temporales creados por la prueba automática de
-    integración del módulo de inventario de TekZon C.A.
+    Limpia los datos temporales de TODAS las pruebas de integración de TekZon C.A.
 
 .DESCRIPTION
-    El script elimina las filas cuyos identificadores comienzan por el prefijo
-    de control de calidad "PRUEBA-INT-" de las tablas `movimiento_inventario`,
-    `producto` y `categoria`, devolviendo la base `tekzon_bd` a su estado real.
-    El orden de borrado respeta las claves foráneas del kádex.
+    Este script es un ENVOLTORIO del utilitario en Node.js
+    `Backend/scripts/limpiarDatosPrueba.mjs`, que es el que realmente hace la
+    limpieza. Se conserva este archivo porque era el punto de entrada documentado
+    en la FASE I (Módulo de Inventario).
 
-    Al filtrar por el prefijo PRUEBA-INT- nunca puede afectar información real
-    de TekZon C.A.
+    ¿POR QUÉ SE DELEGA EN NODE Y NO SE USA mysql.exe?
+      La versión anterior invocaba directamente al cliente de línea de comandos
+      de MySQL en una ruta fija ('C:\xampp\mysql\bin\mysql.exe'). Eso obligaba a
+      tener MySQL instalado exactamente en esa carpeta y fallaba en cualquier otro
+      entorno (por ejemplo, con MariaDB instalado como servicio). El backend ya
+      incluye el driver `mysql2`, de modo que el script de Node se conecta usando
+      las mismas credenciales del archivo .env y funciona en cualquier equipo.
+
+    La limpieza elimina:
+      · Los registros con prefijo 'PRUEBA-' del Módulo de Inventario (FASE I).
+      · El cliente de prueba 'V-99999999' con sus órdenes, facturas y pagos.
+      · Los asientos del kádex y las alertas generadas por las pruebas.
+      Y restaura la existencia y el stock mínimo del producto real REP-PAN-001.
 
 .EXAMPLE
     pwsh -File Database/scripts/limpiarDatosPrueba.ps1
-
-.EXAMPLE
-    pwsh -File Database/scripts/limpiarDatosPrueba.ps1 -RutaClienteMysql 'C:\mysql\bin\mysql.exe'
 #>
 
 param(
-  # Ruta al cliente de línea de comandos de MySQL / MariaDB.
-  [string]$RutaClienteMysql = 'C:\xampp\mysql\bin\mysql.exe',
-
-  # Usuario de la base de datos.
-  [string]$UsuarioBd = 'root',
-
-  # Nombre del esquema de TekZon C.A.
-  [string]$NombreBd = 'tekzon_bd'
+  # Cédula del cliente de prueba de los módulos nuevos.
+  [string]$CedulaPrueba = 'V-99999999'
 )
 
 $ErrorActionPreference = 'Stop'
 
-if (-not (Test-Path $RutaClienteMysql)) {
-  Write-Error "No se encontró el cliente MySQL en '$RutaClienteMysql'. Indique la ruta con -RutaClienteMysql."
+# Se resuelve la ruta del backend a partir de la ubicación de este script,
+# de modo que funcione sin importar el directorio desde el que se invoque.
+$directorioScript = Split-Path -Parent $MyInvocation.MyCommand.Path
+$directorioBackend = Join-Path (Split-Path -Parent (Split-Path -Parent $directorioScript)) 'Backend'
+$scriptLimpieza = Join-Path $directorioBackend 'scripts/limpiarDatosPrueba.mjs'
+
+if (-not (Test-Path $scriptLimpieza)) {
+  Write-Error "No se encontró el utilitario de limpieza en '$scriptLimpieza'."
   exit 1
 }
 
-Write-Host "Eliminando registros de prueba (prefijo PRUEBA-) de $NombreBd..." -ForegroundColor Cyan
+Write-Host 'Delegando la limpieza en el utilitario de Node.js...' -ForegroundColor Cyan
 
-# El orden importa: primero el kádex (FK hacia producto) y luego el producto.
-$sentenciaSql = @"
-USE $NombreBd;
-DELETE FROM movimiento_inventario WHERE cod_producto LIKE 'PRUEBA-%';
-DELETE FROM producto WHERE cod_producto LIKE 'PRUEBA-%';
-DELETE FROM categoria WHERE nombre_categoria LIKE 'PRUEBA-%';
-SELECT
-  (SELECT COUNT(*) FROM producto)              AS productos,
-  (SELECT COUNT(*) FROM movimiento_inventario) AS movimientos,
-  (SELECT COUNT(*) FROM categoria)             AS categorias;
-"@
+# Se ejecuta el script de Node desde la carpeta del backend para que `dotenv`
+# encuentre el archivo .env con las credenciales de la base de datos.
+Push-Location $directorioBackend
+try {
+  & node $scriptLimpieza $CedulaPrueba
 
-$sentenciaSql | & $RutaClienteMysql -u $UsuarioBd
-
-if ($LASTEXITCODE -ne 0) {
-  Write-Error "La limpieza falló con el código de salida $LASTEXITCODE."
-  exit $LASTEXITCODE
+  if ($LASTEXITCODE -ne 0) {
+    Write-Error "La limpieza falló con el código de salida $LASTEXITCODE."
+    exit $LASTEXITCODE
+  }
+} finally {
+  Pop-Location
 }
 
 Write-Host 'Limpieza completada correctamente.' -ForegroundColor Green

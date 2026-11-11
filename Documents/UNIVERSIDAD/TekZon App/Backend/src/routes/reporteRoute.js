@@ -1,0 +1,24 @@
+/**
+ * ==========================================================================
+ * RUTAS DE REPORTES (reporteRoute.js) - TEKZON C.A.
+ * ==========================================================================
+ * MÓDULO DE GENERACIÓN DE REPORTES (PDF, EXCEL Y CORREO)
+ * ==========================================================================
+ */
+import { Router } from 'express';
+import { ReporteController } from '../controllers/reporteController.js';
+import { exigirSesion } from '../middlewares/autenticacionMiddleware.js';
+
+const router = Router();
+
+// Todas las operaciones de reporte requieren usuario autenticado
+router.use(exigirSesion);
+
+// Visualización directa en navegador (PDF inline vía GET)
+router.get('/ver', ReporteController.verReporte);
+
+// Generación analítica multiformato (PDF, Excel, Correo vía POST)
+router.post('/generar', ReporteController.generarReporte);
+router.get('/datos/:tipo', ReporteController.getDatosReporte);
+
+export default router;

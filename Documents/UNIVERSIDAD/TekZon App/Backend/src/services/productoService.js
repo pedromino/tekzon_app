@@ -26,6 +26,8 @@
  */
 import { ProductoModel } from '../models/productoModel.js';
 import { CategoriaModel } from '../models/CategoriaModel.js';
+import { ProveedorModel } from '../models/proveedorModel.js';
+import { CompraModel } from '../models/compraModel.js';
 
 /** Longitud máxima del código de producto según el DDL (VARCHAR 50). */
 const LONGITUD_MAXIMA_CODIGO = 50;
@@ -186,8 +188,34 @@ export const ProductoService = {
       );
     }
 
-    // ---- 5. Inserción: NÓTESE que `existencia` no se envía al modelo.
-    return await ProductoModel.crearProducto({
+    // ---- 5. Validación del Proveedor y Factura de Compra (si se indicaron) ----
+    const rif_proveedor = limpiarTexto(
+      datosEntrada?.rif_proveedor ?? datosEntrada?.rif ?? datosEntrada?.proveedor
+    );
+    const num_factura = limpiarTexto(
+      datosEntrada?.num_factura ?? datosEntrada?.factura ?? datosEntrada?.facturaProveedor
+    );
+
+    let proveedorAsociado = null;
+    if (rif_proveedor || num_factura) {
+      if (!rif_proveedor) {
+        throw new ErrorNegocioProducto('Debe seleccionar el proveedor al cual se le compró la mercancía.', 400);
+      }
+      if (!num_factura) {
+        throw new ErrorNegocioProducto('Debe indicar el número de factura del proveedor según la cual se compró.', 400);
+      }
+
+      proveedorAsociado = await ProveedorModel.obtenerPorRif(rif_proveedor);
+      if (!proveedorAsociado) {
+        throw new ErrorNegocioProducto(`El proveedor con RIF "${rif_proveedor}" no existe en el sistema.`, 400);
+      }
+      if (Number(proveedorAsociado.estado) !== 1) {
+        throw new ErrorNegocioProducto(`El proveedor "${proveedorAsociado.nombre_proveedor}" está inactivo.`, 400);
+      }
+    }
+
+    // ---- 6. Inserción de la ficha técnica: NÓTESE que `existencia` nace en 0.
+    const productoCreado = await ProductoModel.crearProducto({
       cod_producto,
       nombre_producto,
       precio_costo,
@@ -198,6 +226,41 @@ export const ProductoService = {
       imagen,
       stock_minimo
     });
+
+    // ---- 7. Si se indicó compra al proveedor, se registra en la tabla `compra` y `detalle_compra` ----
+    if (proveedorAsociado && num_factura) {
+      try {
+        const idUsuario = datosEntrada?._id_usuario || null;
+        const compraRegistrada = await CompraModel.registrarCompraConDetalle(
+          {
+            num_factura,
+            rif_proveedor: proveedorAsociado.rif_proveedor,
+            id_usuario: idUsuario,
+            monto_total: precio_costo,
+            observaciones: `Adquisición de producto inicial "${nombre_producto}" según factura ${num_factura} del proveedor ${proveedorAsociado.nombre_proveedor}`
+          },
+          [
+            {
+              cod_producto,
+              cantidad: 1,
+              precio_costo_unitario: precio_costo,
+              subtotal: precio_costo
+            }
+          ]
+        );
+
+        productoCreado.compra = {
+          id_compra: compraRegistrada.id_compra,
+          num_factura,
+          rif_proveedor: proveedorAsociado.rif_proveedor,
+          nombre_proveedor: proveedorAsociado.nombre_proveedor
+        };
+      } catch (errCompra) {
+        console.error('Error al registrar compra inicial del producto:', errCompra);
+      }
+    }
+
+    return productoCreado;
   },
 
   /**
