@@ -30,7 +30,10 @@ export const CajaController = {
   /** GET /api/caja -> lista de turnos con su total recaudado. */
   async getCajas(req, res) {
     try {
-      const cajas = await CajaService.obtenerCajas();
+      const usuario = req.usuarioAutenticado;
+      // Administrador ve todos los turnos; cajero ve sus propios turnos de caja
+      const idUsuarioFiltro = usuario?.tipo_usuario === 'administrador' ? null : usuario?.id_usuario;
+      const cajas = await CajaService.obtenerCajas(idUsuarioFiltro);
 
       return res.status(200).json({
         exito: true,
@@ -43,12 +46,13 @@ export const CajaController = {
   },
 
   /**
-   * GET /api/caja/activa -> la caja abierta, o `null` si no hay turno abierto.
-   * El frontend usa este endpoint para saber si puede cobrar.
+   * GET /api/caja/activa -> la caja abierta del usuario activo, o `null` si no hay turno abierto.
+   * El frontend usa este endpoint para saber si este cajero puede cobrar.
    */
   async getCajaActiva(req, res) {
     try {
-      const caja = await CajaService.obtenerCajaActiva();
+      const idUsuario = req.usuarioAutenticado?.id_usuario;
+      const caja = await CajaService.obtenerCajaActiva(idUsuario);
 
       return res.status(200).json({
         exito: true,

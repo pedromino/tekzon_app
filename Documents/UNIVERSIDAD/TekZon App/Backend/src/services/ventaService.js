@@ -206,11 +206,11 @@ export const VentaService = {
 
     const caja = Number.isInteger(idCajaRecibida) && idCajaRecibida > 0
       ? await CajaModel.obtenerPorId(idCajaRecibida)
-      : await CajaModel.obtenerCajaAbierta();
+      : await CajaModel.obtenerCajaAbierta(id_usuario);
 
     if (!caja) {
       throw new ErrorNegocio(
-        'No hay una caja abierta para registrar el cobro. Abra la caja del día en el módulo de Caja.',
+        'No tienes una caja abierta para registrar el cobro. Abre tu caja en el módulo de Caja.',
         400
       );
     }
@@ -219,6 +219,13 @@ export const VentaService = {
       throw new ErrorNegocio(
         `La caja seleccionada (id ${caja.id_caja}) está cerrada. Seleccione una caja abierta.`,
         400
+      );
+    }
+
+    if (Number(caja.id_usuario) !== id_usuario && usuarioAutenticado?.tipo_usuario !== 'administrador') {
+      throw new ErrorNegocio(
+        `La caja N° ${caja.id_caja} pertenece a otro usuario. Solo puedes operar tu propia caja activa.`,
+        403
       );
     }
 

@@ -87,15 +87,23 @@ export const CajaModel = {
    *
    * PROPÓSITO FUNCIONAL: alimenta la pantalla de Caja con el resumen de cada
    * turno, sumando las ventas vigentes por ID de sesión y los cobros de servicio técnico.
+   * Si se recibe `id_usuario`, filtra únicamente las cajas correspondientes a ese usuario.
    */
-  async listarCajas() {
-    const [filas] = await pool.query(
-      `SELECT ${COLUMNAS_CAJA},
+  async listarCajas(id_usuario = null) {
+    let sql = `SELECT ${COLUMNAS_CAJA},
               ${SUBCONSULTAS_TOTALES_CAJA}
          FROM caja c
-         LEFT JOIN usuario u ON u.id_usuario = c.id_usuario
-        ORDER BY c.estado ASC, c.id_caja DESC`
-    );
+         LEFT JOIN usuario u ON u.id_usuario = c.id_usuario`;
+    const params = [];
+
+    if (id_usuario) {
+      sql += ` WHERE c.id_usuario = ?`;
+      params.push(id_usuario);
+    }
+
+    sql += ` ORDER BY c.estado ASC, c.id_caja DESC`;
+
+    const [filas] = await pool.query(sql, params);
 
     return filas;
   },
@@ -116,20 +124,26 @@ export const CajaModel = {
 
   /**
    * RECUPERA LA CAJA ABIERTA MÁS RECIENTE CON SUS TOTALES EN VIVO.
-   * Es la caja activa consumida por la pantalla de cierre de caja.
+   * Si se pasa `id_usuario`, devuelve la caja abierta asignada a ese cajero/usuario.
    */
-  async obtenerCajaAbierta() {
-    const [filas] = await pool.query(
-      `SELECT ${COLUMNAS_CAJA},
+  async obtenerCajaAbierta(id_usuario = null) {
+    let sql = `SELECT ${COLUMNAS_CAJA},
               ${SUBCONSULTAS_TOTALES_CAJA}
          FROM caja c
          LEFT JOIN usuario u ON u.id_usuario = c.id_usuario
-        WHERE c.estado = 'ABIERTA'
-        ORDER BY c.id_caja DESC
-        LIMIT 1`
-    );
+        WHERE c.estado = 'ABIERTA'`;
+    const params = [];
 
-    return filas[0];
+    if (id_usuario) {
+      sql += ` AND c.id_usuario = ?`;
+      params.push(id_usuario);
+    }
+
+    sql += ` ORDER BY c.id_caja DESC LIMIT 1`;
+
+    const [filas] = await pool.query(sql, params);
+
+    return filas[0] || null;
   },
 
   /**

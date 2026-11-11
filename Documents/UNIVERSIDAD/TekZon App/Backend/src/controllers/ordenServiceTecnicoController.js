@@ -54,6 +54,24 @@ export const OrdenServiceTecnicoController = {
   },
 
   /**
+   * GET /api/ordenes-tecnicas/tecnicos
+   * Lista de técnicos activos disponibles para asignación en recepción.
+   */
+  async getTecnicos(req, res) {
+    try {
+      const tecnicos = await OrdenServiceTecnicoService.obtenerTecnicos();
+
+      return res.status(200).json({
+        exito: true,
+        total: tecnicos.length,
+        tecnicos
+      });
+    } catch (error) {
+      return responderConError(res, error, 'GET /api/ordenes-tecnicas/tecnicos');
+    }
+  },
+
+  /**
    * GET /api/ordenes-tecnicas/indicadores
    * KPI del taller (conteo por estado, pendientes de cobro, ingresos).
    */

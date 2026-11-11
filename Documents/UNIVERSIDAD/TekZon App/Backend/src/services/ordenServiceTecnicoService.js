@@ -329,11 +329,16 @@ export const OrdenServiceTecnicoService = {
       );
     }
 
-    // ---- 4. Firma del usuario que abre la orden (FK obligatoria) ----
-    const id_usuario = Number(usuarioAutenticado?.id_usuario);
+    // ---- 4. Técnico responsable asignado a la orden (FK obligatoria) ----
+    const idTecnicoRecibido = Number(
+      datosEntrada?.id_tecnico ?? datosEntrada?.idTecnico ?? datosEntrada?.id_usuario
+    );
+    const id_usuario = Number.isInteger(idTecnicoRecibido) && idTecnicoRecibido > 0
+      ? idTecnicoRecibido
+      : Number(usuarioAutenticado?.id_usuario);
 
     if (!Number.isInteger(id_usuario) || id_usuario <= 0) {
-      throw new ErrorNegocio('No se pudo identificar al usuario que registra la recepción.', 401);
+      throw new ErrorNegocio('Debe seleccionar el técnico responsable de la orden.', 400);
     }
 
     // ---- 5. Escritura atómica (cliente + dispositivo + orden) ----
@@ -808,31 +813,38 @@ export const OrdenServiceTecnicoService = {
     // ---- 4. Validación del método de pago, el monto y la tasa ----
     const datosPagoValidados = validarDatosPago(datosCobro, totalCalculado);
 
-    // ---- 5. Caja: se exige una caja ABIERTA para registrar el ingreso ----
+    const id_usuario = Number(usuarioAutenticado?.id_usuario);
+
+    if (!Number.isInteger(id_usuario) || id_usuario <= 0) {
+      throw new ErrorNegocio('No se pudo identificar al usuario que procesa el cobro.', 401);
+    }
+
+    // ---- 5. Caja: se exige una caja ABIERTA del usuario para registrar el ingreso ----
     const idCajaRecibida = Number(datosCobro?.id_caja ?? datosCobro?.caja);
 
     const caja = Number.isInteger(idCajaRecibida) && idCajaRecibida > 0
       ? await CajaModel.obtenerPorId(idCajaRecibida)
-      : await CajaModel.obtenerCajaAbierta();
+      : await CajaModel.obtenerCajaAbierta(id_usuario);
 
     if (!caja) {
       throw new ErrorNegocio(
-        'No hay una caja abierta para registrar el cobro. Abra la caja del día en el módulo de Caja.',
+        'No tienes una caja abierta para registrar el cobro. Abre tu caja en el módulo de Caja.',
         400
       );
     }
 
     if (caja.estado !== 'ABIERTA') {
       throw new ErrorNegocio(
-        `La caja seleccionada (id ${caja.id_caja}) está cerrada. Seleccione una caja abierta.`,
+        `La caja seleccionada (Turno N° ${caja.id_caja}) está cerrada. Seleccione una caja abierta.`,
         400
       );
     }
 
-    const id_usuario = Number(usuarioAutenticado?.id_usuario);
-
-    if (!Number.isInteger(id_usuario) || id_usuario <= 0) {
-      throw new ErrorNegocio('No se pudo identificar al usuario que procesa el cobro.', 401);
+    if (Number(caja.id_usuario) !== id_usuario && usuarioAutenticado?.tipo_usuario !== 'administrador') {
+      throw new ErrorNegocio(
+        `La caja N° ${caja.id_caja} pertenece a otro usuario. Solo puedes cobrar en tu propia caja activa.`,
+        403
+      );
     }
 
     // ---- 6. Escritura transaccional: pago + factura + cierre de la orden ----
@@ -917,6 +929,11 @@ export const OrdenServiceTecnicoService = {
     }
 
     return documento;
+  },
+
+  /** LISTA DE TÉCNICOS DISPONIBLES PARA ASIGNACIÓN */
+  async obtenerTecnicos() {
+    return await OrdenServiceTecnicoModel.obtenerTecnicos();
   }
 };
 

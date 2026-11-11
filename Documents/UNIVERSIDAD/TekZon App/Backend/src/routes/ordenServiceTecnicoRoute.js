@@ -50,6 +50,9 @@ router.post(
   OrdenServiceTecnicoController.postRecepcion
 );
 
+/** Lista de técnicos disponibles. */
+router.get('/tecnicos', OrdenServiceTecnicoController.getTecnicos);
+
 /** Indicadores KPI del taller. */
 router.get('/indicadores', OrdenServiceTecnicoController.getIndicadores);
 

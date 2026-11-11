@@ -328,6 +328,26 @@ export const OrdenServiceTecnicoModel = {
    * ====================================================================== */
 
   /**
+   * LISTA DE TÉCNICOS ACTIVOS (para asignación en recepción y panel técnico).
+   */
+  async obtenerTecnicos() {
+    const [filas] = await pool.query(
+      `SELECT u.id_usuario,
+              u.nombre_usuario,
+              u.username,
+              r.tipo_usuario AS rol
+         FROM usuario u
+         JOIN rol_usuario r ON r.id_rolusuario = u.id_rolusuario
+        WHERE u.id_rolusuario IN (1, 2)
+          AND u.estado = 1
+          AND u.pendiente_aprobacion = 0
+        ORDER BY u.nombre_usuario ASC`
+    );
+
+    return filas;
+  },
+
+  /**
    * REGISTRA LA RECEPCIÓN COMPLETA DEL EQUIPO Y CREA LA ORDEN "Pendiente".
    *
    * PROPÓSITO FUNCIONAL:

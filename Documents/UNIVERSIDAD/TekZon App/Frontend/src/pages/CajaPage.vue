@@ -42,6 +42,7 @@ import LoadingSpinner from '../components/LoadingSpinner.vue';
 import ToastNotificaciones from '../components/ToastNotificaciones.vue';
 import ModalGenerarReporte from '../components/ModalGenerarReporte.vue';
 import CajaServices from '../services/CajaServices.js';
+import { sesion } from '../services/sesion.js';
 // Utilitario compartido de apertura/cierre de modales de Bootstrap 5.
 import { abrirModal, cerrarModal } from '../utils/utilidadesModales.js';
 // Helpers de formato y presentación compartidos por los módulos nuevos.
@@ -483,11 +484,13 @@ const cajaDelArqueo = computed(() => arqueoDetallado.value?.caja || turnoParaArq
       <section class="card-ts mb-3">
         <div class="card-ts__head">
           <div>
-            <h3 class="card-ts__title">Caja activa</h3>
+            <h3 class="card-ts__title">
+              Caja activa — {{ cajaActiva ? cajaActiva.usuario : (sesion.usuario?.nombre || 'Mi sesión') }}
+            </h3>
             <p class="card-ts__sub">
               {{ cajaActiva
-                ? 'Turno en curso · los cobros se registran en esta caja'
-                : 'Sin turno abierto · el sistema no permitirá cobrar' }}
+                ? 'Turno personal en curso · todas las transacciones se registran a tu nombre'
+                : 'Sin turno abierto para tu usuario · el sistema no permitirá cobrar' }}
             </p>
           </div>
           <span class="badge-ts" :class="cajaActiva ? 'badge-ok' : 'badge-neutral'">
@@ -673,6 +676,15 @@ const cajaDelArqueo = computed(() => arqueoDetallado.value?.caja || turnoParaArq
 
           <form @submit.prevent="confirmarAperturaCaja" novalidate>
             <div class="modal-body">
+              <!-- Cajero responsable del turno -->
+              <div class="p-2 mb-3 bg-light rounded small border d-flex align-items-center gap-2">
+                <i class="bi bi-person-badge text-primary" style="font-size:1.15rem;"></i>
+                <div>
+                  <strong>Cajero responsable:</strong> {{ sesion.usuario?.nombre || 'Usuario actual' }}
+                  <span class="text-muted-2">({{ sesion.usuario?.rol || 'Cajero' }})</span>
+                </div>
+              </div>
+
               <!-- Estado de Error (por ejemplo, el 409 de caja ya abierta) -->
               <div v-if="mensajeErrorApertura" class="readonly-note" role="alert">
                 <i class="bi bi-exclamation-triangle-fill"></i>
