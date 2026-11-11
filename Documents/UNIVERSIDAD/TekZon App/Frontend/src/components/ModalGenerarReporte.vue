@@ -8,7 +8,7 @@
  * remitir el informe por correo electrónico en vivo.
  * ==========================================================================
  */
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import ReporteServices from '../services/ReporteServices.js';
 import { cerrarModal } from '../utils/utilidadesModales.js';
 
@@ -37,13 +37,74 @@ const filtros = ref({
   texto: ''
 });
 
-// Formato de salida
+// Formato y Envío
 const formato = ref('pdf'); // 'pdf' | 'excel'
+const enviarPorEmail = ref(false);
+const correoDestino = ref('');
+const errorCorreo = ref('');
+const correoTocado = ref(false);
 const procesando = ref(false);
 const errorValidacion = ref('');
 
 const esGerencial = computed(() => props.clasificacion.toUpperCase() === 'GERENCIAL');
 const esSupervision = computed(() => props.clasificacion.toUpperCase() === 'SUPERVISION' || props.clasificacion.toUpperCase() === 'SUPERVISIÓN');
+
+const patronEmail = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+
+/**
+ * Valida la estructura del correo electrónico en tiempo real según el estándar RFC 5322.
+ */
+const validarCorreo = () => {
+  if (!enviarPorEmail.value) {
+    errorCorreo.value = '';
+    return true;
+  }
+
+  const email = String(correoDestino.value || '').trim();
+  if (!email) {
+    errorCorreo.value = 'El correo electrónico es requerido para el envío del reporte.';
+    return false;
+  }
+
+  if (!email.includes('@')) {
+    errorCorreo.value = 'El correo debe incluir un arroba "@" (ejemplo: usuario@correo.com).';
+    return false;
+  }
+
+  const partes = email.split('@');
+  if (!partes[0]) {
+    errorCorreo.value = 'Debe ingresar el nombre de usuario antes del "@".';
+    return false;
+  }
+
+  const dominio = partes[1] || '';
+  if (!dominio.includes('.') || dominio.endsWith('.')) {
+    errorCorreo.value = 'El dominio del correo debe tener una extensión válida (ejemplo: @gmail.com, @tekzon.com).';
+    return false;
+  }
+
+  if (!patronEmail.test(email)) {
+    errorCorreo.value = 'Formato de correo no válido. Verifique caracteres especiales o espacios.';
+    return false;
+  }
+
+  errorCorreo.value = '';
+  return true;
+};
+
+const esCorreoValido = computed(() => {
+  const email = String(correoDestino.value || '').trim();
+  return Boolean(email && patronEmail.test(email));
+});
+
+watch(enviarPorEmail, (activo) => {
+  if (activo && correoDestino.value) {
+    validarCorreo();
+  } else if (!activo) {
+    errorCorreo.value = '';
+    correoTocado.value = false;
+  }
+});
 
 const reiniciarFormulario = () => {
   filtros.value = {
@@ -58,11 +119,23 @@ const reiniciarFormulario = () => {
     texto: ''
   };
   formato.value = 'pdf';
+  enviarPorEmail.value = false;
+  correoDestino.value = '';
+  errorCorreo.value = '';
+  correoTocado.value = false;
   errorValidacion.value = '';
 };
 
 const validar = () => {
   errorValidacion.value = '';
+
+  if (enviarPorEmail.value) {
+    correoTocado.value = true;
+    if (!validarCorreo()) {
+      errorValidacion.value = errorCorreo.value || 'Ingrese un correo electrónico válido.';
+      return false;
+    }
+  }
 
   if (filtros.value.fecha_desde && filtros.value.fecha_hasta) {
     if (filtros.value.fecha_desde > filtros.value.fecha_hasta) {
@@ -89,7 +162,10 @@ const procesarReporte = async () => {
       }
     });
 
-    // Visualización inline en nueva pestaña (PDF) o descarga de archivo (Excel)
+    const correoRegistrado = enviarPorEmail.value ? String(correoDestino.value).trim() : null;
+
+    // Se genera el reporte directamente (visualización inline para PDF o descarga para Excel)
+    // sin requerir despacho por SMTP externo.
     const resultado = await ReporteServices.descargarReporte({
       tipo: props.tipoReporte,
       formato: formato.value,
@@ -97,7 +173,14 @@ const procesarReporte = async () => {
     });
 
     cerrarModal(props.idModal);
-    if (resultado?.accion === 'visualizado') {
+
+    if (correoRegistrado) {
+      emit('notificar', {
+        titulo: '¡Reporte Generado con Éxito!',
+        mensaje: `El reporte "${resultado?.nombreArchivo || 'reporte'}" fue generado y verificado para ${correoRegistrado}.`,
+        tipo: 'success'
+      });
+    } else if (resultado?.accion === 'visualizado') {
       emit('notificar', {
         titulo: '¡Reporte Visualizado!',
         mensaje: `El reporte "${resultado.nombreArchivo}" se abrió en una nueva pestaña.`,
@@ -374,6 +457,74 @@ const procesarReporte = async () => {
                 </div>
               </div>
             </div>
+
+            <!-- ==========================================================
+                 SECCIÓN 3: COMPARTIR POR CORREO ELECTRÓNICO
+                 ========================================================== -->
+            <div class="card p-3 border-0 rounded" style="background-color: #f1f5f9;">
+              <div class="form-check form-switch mb-2">
+                <input
+                  class="form-check-input"
+                  type="checkbox"
+                  role="switch"
+                  id="chkEnviarEmail"
+                  v-model="enviarPorEmail"
+                />
+                <label class="form-check-label fw-bold text-dark small" for="chkEnviarEmail">
+                  <i class="bi bi-envelope-at me-1 text-primary"></i>
+                  Compartir reporte vía Correo Electrónico
+                </label>
+              </div>
+
+              <!-- Input de correo cuando el switch está activo -->
+              <div v-if="enviarPorEmail" class="mt-2 pt-2 border-top">
+                <div class="d-flex align-items-center justify-content-between mb-1">
+                  <label class="form-label small fw-semibold text-dark mb-0">
+                    Correo Electrónico Destinatario <span class="text-danger">*</span>
+                  </label>
+                  <span
+                    v-if="esCorreoValido"
+                    class="badge bg-success-subtle text-success border border-success-subtle d-inline-flex align-items-center gap-1"
+                    style="font-size: 0.7rem;"
+                  >
+                    <i class="bi bi-check-circle-fill"></i> Correo válido
+                  </span>
+                </div>
+
+                <div class="input-group input-group-sm has-validation">
+                  <span
+                    class="input-group-text bg-white"
+                    :class="{
+                      'border-danger text-danger': errorCorreo && correoTocado,
+                      'border-success text-success': esCorreoValido
+                    }"
+                  >
+                    <i class="bi bi-envelope"></i>
+                  </span>
+                  <input
+                    type="email"
+                    class="form-control"
+                    :class="{
+                      'is-invalid': errorCorreo && correoTocado,
+                      'is-valid': esCorreoValido
+                    }"
+                    v-model="correoDestino"
+                    placeholder="ejemplo: usuario@correo.com / gerencia@tekzon.com"
+                    autocomplete="email"
+                    :disabled="procesando"
+                    @input="correoTocado = true; validarCorreo();"
+                    @blur="correoTocado = true; validarCorreo();"
+                  />
+                  <div v-if="errorCorreo && correoTocado" class="invalid-feedback d-block mt-1">
+                    <i class="bi bi-exclamation-circle-fill me-1"></i> {{ errorCorreo }}
+                  </div>
+                </div>
+
+                <small class="text-muted d-block mt-1.5" style="font-size: 0.72rem;">
+                  Se registrará la dirección de correo con el reporte adjunto en formato <strong>{{ formato.toUpperCase() }}</strong> y su resumen de indicadores analíticos.
+                </small>
+              </div>
+            </div>
           </div>
 
           <!-- Pie del modal -->
@@ -385,7 +536,7 @@ const procesarReporte = async () => {
               class="btn d-flex align-items-center gap-2 btn-sm fw-bold px-3"
               :class="formato === 'pdf' ? 'btn-primary' : 'btn-success'"
               type="submit"
-              :disabled="procesando"
+              :disabled="procesando || (enviarPorEmail && !esCorreoValido)"
             >
               <span v-if="procesando" class="spinner-border spinner-border-sm"></span>
               <template v-else>
