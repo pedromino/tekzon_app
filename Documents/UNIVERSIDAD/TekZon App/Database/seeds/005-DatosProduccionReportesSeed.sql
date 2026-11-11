@@ -146,42 +146,9 @@ ON DUPLICATE KEY UPDATE
   `observaciones`  = VALUES(`observaciones`);
 
 -- ----------------------------------------------------------------------------
--- 8. ÓRDENES DE SERVICIO TÉCNICO (Panel del Técnico - KPIs de Resolución)
--- ----------------------------------------------------------------------------
-INSERT INTO `orden_tecnico` (`id_ordentec`, `id_dispositivo`, `id_usuario`, `falla_reportada`, `costo`, `estado`, `fecha_ingreso`, `fecha_entrega`, `accesorios`, `patron_desbloqueo`, `observaciones`, `costo_mano_obra`, `total_repuestos`, `total`, `cobrada`, `numero_factura`, `id_caja`, `fecha_cierre`) VALUES
-  (201, 101, 1, 'Pantalla rota y táctil inoperante por caída', 115.00, 'ENTREGADO', '2026-11-05 09:30:00', '2026-11-06 15:00:00', 'Forro protector negro', 'Pin: 1234', 'Cambio exitoso de módulo OLED original con calibración TrueTone.', 25.00, 115.00, 140.00, 1, 'FAC-000101', 10, '2026-11-06 15:00:00'),
-  (202, 102, 1, 'Batería inflada y recalentamiento al cargar', 38.00, 'ENTREGADO', '2026-11-06 10:15:00', '2026-11-07 12:30:00', 'Sin accesorios', 'Patrón Z', 'Sustitución de celda y sellado térmico contra humedad.', 15.00, 38.00, 53.00, 1, 'FAC-000102', 10, '2026-11-07 12:30:00'),
-  (203, 103, 1, 'No enciende tras contacto moderado con líquido', 0.00, 'EN_REPARACION', '2026-11-08 11:00:00', NULL, 'Cargador genérico', 'Sin clave', 'Baño ultrasónico realizado; en proceso de reballing de PMIC.', 35.00, 0.00, 35.00, 0, NULL, 11, NULL),
-  (204, 104, 1, 'No carga y pin de conexión flojo', 8.50, 'FINALIZADO', '2026-11-09 09:00:00', NULL, 'Cable USB', 'Pin: 0000', 'Reemplazo de pin Tipo C SMD. Listo para ser retirado por el cliente.', 15.00, 8.50, 23.50, 0, NULL, 11, NULL),
-  (205, 105, 1, 'Batería con 74% de vida útil, requiere cambio', 38.00, 'RECIBIDO', '2026-11-10 08:30:00', NULL, 'Forro transparente', 'Pin: 4321', 'En cola de espera de mesa de trabajo técnica.', 15.00, 38.00, 53.00, 0, NULL, 12, NULL),
-  (206, 106, 1, 'Pantalla con líneas verticales y parpadeo', 75.00, 'DIAGNOSTICO', '2026-11-10 09:15:00', NULL, 'Sin accesorios', 'Sin clave', 'Revisando si es falla de flex o daño físico del panel AMOLED.', 20.00, 75.00, 95.00, 0, NULL, 12, NULL),
-  (207, 107, 1, 'Muerte súbita tras actualización de sistema', 0.00, 'CANCELADO', '2026-11-04 14:00:00', '2026-11-05 10:00:00', 'Caja original', 'Sin clave', 'CPU con daño interno en pistas; cliente desestimó presupuesto.', 0.00, 0.00, 0.00, 0, NULL, 10, '2026-11-05 10:00:00')
-ON DUPLICATE KEY UPDATE
-  `falla_reportada`   = VALUES(`falla_reportada`),
-  `estado`            = VALUES(`estado`),
-  `costo_mano_obra`   = VALUES(`costo_mano_obra`),
-  `total_repuestos`   = VALUES(`total_repuestos`),
-  `total`             = VALUES(`total`),
-  `cobrada`           = VALUES(`cobrada`),
-  `numero_factura`    = VALUES(`numero_factura`),
-  `observaciones`     = VALUES(`observaciones`);
-
--- Repuestos aplicados en órdenes
-INSERT INTO `detalle_orden` (`id_ordentec`, `cod_producto`, `cantidad`, `precio_unitario`, `tipo_item`, `subtotal`) VALUES
-  (201, 'REP-PANT-IP13', 1, 115.00, 'REPUESTO', 115.00),
-  (202, 'REP-BAT-IP12', 1, 38.00, 'REPUESTO', 38.00),
-  (204, 'REP-PIN-C-UNIV', 1, 8.50, 'REPUESTO', 8.50)
-ON DUPLICATE KEY UPDATE
-  `cantidad`        = VALUES(`cantidad`),
-  `precio_unitario` = VALUES(`precio_unitario`),
-  `subtotal`        = VALUES(`subtotal`);
-
--- ----------------------------------------------------------------------------
--- 9. VENTAS FACTURADAS Y PAGOS (Ventas directas y de taller)
+-- 8. VENTAS FACTURADAS Y PAGOS (Ventas directas de almacén)
 -- ----------------------------------------------------------------------------
 INSERT INTO `venta` (`num_factura`, `cedula_cli`, `monto_total`, `fecha_venta`, `id_usuario`, `tipo_venta`, `estado`, `id_caja`) VALUES
-  ('FAC-000101', 'V14250912', 140.00, '2026-11-06 15:00:00', 1, 'SERVICIO_TECNICO', 'Vigente', 10),
-  ('FAC-000102', 'V18942105', 53.00,  '2026-11-07 12:30:00', 1, 'SERVICIO_TECNICO', 'Vigente', 10),
   ('FAC-000103', 'V25890123', 24.00,  '2026-11-08 10:45:00', 1, 'DIRECTA',          'Vigente', 10),
   ('FAC-000104', 'V27102934', 184.00, '2026-11-09 11:20:00', 1, 'DIRECTA',          'Vigente', 11),
   ('FAC-000105', 'V19876543', 15.00,  '2026-11-09 16:40:00', 1, 'DIRECTA',          'Vigente', 11),
@@ -209,8 +176,6 @@ ON DUPLICATE KEY UPDATE
 
 -- Pagos desglosados por método financiero
 INSERT INTO `pago` (`id_pago`, `id_caja`, `tipo_origen`, `metodo_pago`, `monto_usd`, `tasa_cambio`, `referencia`, `fecha_pago`, `venta_num_factura`, `id_ordentec`) VALUES
-  (501, 10, 'SERVICIO_TECNICO', 'EFECTIVO_USD',  140.00, 1.00,  'CASH-S10-01', '2026-11-06 15:00:00', 'FAC-000101', 201),
-  (502, 10, 'SERVICIO_TECNICO', 'PAGO_MOVIL',    53.00,  39.50, 'PM-984123',   '2026-11-07 12:30:00', 'FAC-000102', 202),
   (503, 10, 'VENTA_DIRECTA',    'EFECTIVO_USD',  24.00,  1.00,  'CASH-S10-02', '2026-11-08 10:45:00', 'FAC-000103', NULL),
   (504, 11, 'VENTA_DIRECTA',    'TRANSFERENCIA', 184.00, 40.00, 'TRANS-0102-55','2026-11-09 11:20:00', 'FAC-000104', NULL),
   (505, 11, 'VENTA_DIRECTA',    'PAGO_MOVIL',    15.00,  40.00, 'PM-112093',   '2026-11-09 16:40:00', 'FAC-000105', NULL),
@@ -224,7 +189,7 @@ ON DUPLICATE KEY UPDATE
   `venta_num_factura` = VALUES(`venta_num_factura`);
 
 -- ----------------------------------------------------------------------------
--- 10. MOVIMIENTOS DE KÁRDEX / ENTRADAS Y SALIDAS
+-- 9. MOVIMIENTOS DE KÁRDEX / ENTRADAS Y SALIDAS
 -- ----------------------------------------------------------------------------
 INSERT INTO `movimiento_inventario` (`id_movimiento`, `cod_producto`, `id_usuario`, `tipo_movimiento`, `cantidad`, `existencia_previa`, `existencia_posterior`, `motivo`, `fecha_movimiento`, `origen`) VALUES
   (301, 'REP-PANT-IP13', 1, 'ENTRADA', 10, 0, 10, 'Ingreso por compra FAC-PROV-901 MayorTech', '2026-10-15 11:00:00', 'COMPRA'),

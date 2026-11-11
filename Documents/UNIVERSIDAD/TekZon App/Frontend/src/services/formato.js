@@ -274,10 +274,33 @@ export const ESTADOS_ORDEN_UI = Object.freeze({
 });
 
 /** Devuelve la presentación (etiqueta, clase, icono) de un estado de orden. */
-export const presentacionEstadoOrden = (estado) => ESTADOS_ORDEN_UI[estado] || {
-  etiqueta: estado || 'Desconocido',
-  clase: 'badge-neutral',
-  icono: 'bi-question-circle'
+export const presentacionEstadoOrden = (estado) => {
+  if (!estado) {
+    return {
+      etiqueta: 'Desconocido',
+      clase: 'badge-neutral',
+      icono: 'bi-question-circle'
+    };
+  }
+
+  if (ESTADOS_ORDEN_UI[estado]) {
+    return ESTADOS_ORDEN_UI[estado];
+  }
+
+  const normalizado = String(estado).trim().toLowerCase();
+  const clave = Object.keys(ESTADOS_ORDEN_UI).find(
+    (k) => k.toLowerCase() === normalizado
+  );
+
+  if (clave) {
+    return ESTADOS_ORDEN_UI[clave];
+  }
+
+  return {
+    etiqueta: estado,
+    clase: 'badge-neutral',
+    icono: 'bi-question-circle'
+  };
 };
 
 /**

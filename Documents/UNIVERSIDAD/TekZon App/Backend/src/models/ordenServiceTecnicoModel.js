@@ -293,7 +293,8 @@ export const OrdenServiceTecnicoModel = {
     );
 
     // Se normaliza el conteo por estado a un objeto con las cuatro claves
-    // siempre presentes, para que el frontend no tenga que validar `undefined`.
+    // oficiales del sistema siempre presentes, garantizando que estados no estándar
+    // no distorsionen los indicadores ni la presentación de la interfaz.
     const porEstado = {
       Pendiente: 0,
       'En Reparacion': 0,
@@ -302,7 +303,13 @@ export const OrdenServiceTecnicoModel = {
     };
 
     filasEstado.forEach((fila) => {
-      porEstado[fila.estado] = Number(fila.total);
+      const estadoFila = String(fila.estado || '').trim();
+      const claveValida = Object.keys(porEstado).find(
+        (k) => k.toLowerCase() === estadoFila.toLowerCase()
+      );
+      if (claveValida) {
+        porEstado[claveValida] += Number(fila.total);
+      }
     });
 
     const cobro = filasCobro[0] || {};
