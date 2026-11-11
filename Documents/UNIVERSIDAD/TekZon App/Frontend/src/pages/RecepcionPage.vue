@@ -39,10 +39,11 @@
  *                   `codigo` y el `mensaje` que devuelve `describirError()`.
  * ==========================================================================
  */
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import ToastNotificaciones from '../components/ToastNotificaciones.vue';
 import ClienteServices from '../services/ClienteServices.js';
 import OrdenServiceTecnicoServices from '../services/OrdenServiceTecnicoServices.js';
+import { sesion } from '../services/sesion.js';
 // Helpers compartidos por todos los módulos nuevos (formato y presentación).
 import {
   describirError,
@@ -90,7 +91,9 @@ const crearFormularioVacio = () => ({
   // ---- 3. Motivo del ingreso ----
   falla: '',
   accesorios: '',
-  patron: ''
+  patron: '',
+  // ---- 4. Técnico responsable asignado ----
+  idTecnico: ''
 });
 
 // ==========================================================================
@@ -113,6 +116,28 @@ const ultimaCedulaConsultada = ref('');
 
 /** Orden creada con éxito: alimenta el panel de resultado. */
 const ordenCreada = ref(null);
+
+/** Lista de técnicos activos disponibles para asignación. */
+const tecnicos = ref([]);
+const cargandoTecnicos = ref(false);
+
+onMounted(async () => {
+  try {
+    cargandoTecnicos.value = true;
+    tecnicos.value = await OrdenServiceTecnicoServices.listarTecnicos();
+
+    // Si el usuario autenticado es técnico o administrador, pre-seleccionarlo
+    if (sesion.usuario?.id_usuario && tecnicos.value.some(t => t.id_usuario === sesion.usuario.id_usuario)) {
+      formularioRecepcion.value.idTecnico = sesion.usuario.id_usuario;
+    } else if (tecnicos.value.length === 1) {
+      formularioRecepcion.value.idTecnico = tecnicos.value[0].id_usuario;
+    }
+  } catch (error) {
+    console.error('Error al cargar lista de técnicos:', error);
+  } finally {
+    cargandoTecnicos.value = false;
+  }
+});
 
 // ==========================================================================
 // ESTADOS DE UI (Cargando / Éxito / Error)
@@ -278,6 +303,10 @@ const validarFormulario = () => {
     errores.falla = 'Describa la falla que reporta el cliente: es la base del diagnóstico.';
   }
 
+  if (!datos.idTecnico) {
+    errores.idTecnico = 'Debe seleccionar el técnico responsable del equipo.';
+  }
+
   erroresFormulario.value = errores;
 
   return Object.keys(errores).length === 0;
@@ -338,6 +367,7 @@ const enviarRecepcion = async () => {
       marca: String(datos.marca).trim(),
       modelo: String(datos.modelo).trim(),
       serie: String(datos.serie).trim(),
+      idTecnico: datos.idTecnico,
       falla: String(datos.falla).trim(),
       accesorios: String(datos.accesorios).trim(),
       patron: String(datos.patron).trim()
@@ -508,6 +538,13 @@ const registrarOtraRecepcion = () => {
           <dd class="col-sm-9">
             <strong>{{ presentacionEstadoOrden(ordenCreada.orden.estado).etiqueta }}</strong>
             · avance {{ ordenCreada.orden.avance }}%
+          </dd>
+
+          <dt class="col-sm-3 text-muted-2">Técnico responsable</dt>
+          <dd class="col-sm-9">
+            <span class="badge-ts badge-info">
+              <i class="bi bi-person-gear"></i> {{ ordenCreada.orden.tecnico }}
+            </span>
           </dd>
 
           <dt class="col-sm-3 text-muted-2">Ingreso</dt>
@@ -834,6 +871,33 @@ const registrarOtraRecepcion = () => {
             >
             <div class="form-text">
               Necesario para que el técnico pueda probar el equipo durante la reparación.
+            </div>
+          </div>
+
+          <!-- Técnico responsable asignado -->
+          <div class="col-md-6">
+            <label class="form-label" for="recepcion-tecnico">Técnico responsable*</label>
+            <div class="input-icon">
+              <i class="bi bi-person-gear" aria-hidden="true"></i>
+              <select
+                id="recepcion-tecnico"
+                class="form-select"
+                :class="{ 'is-invalid': erroresFormulario.idTecnico }"
+                v-model="formularioRecepcion.idTecnico"
+                :disabled="enviando || cargandoTecnicos"
+                @change="limpiarErrorDeCampo('idTecnico')"
+              >
+                <option value="" disabled>Seleccione el técnico asignado...</option>
+                <option v-for="t in tecnicos" :key="t.id_usuario" :value="t.id_usuario">
+                  {{ t.nombre_usuario }} ({{ t.rol || 'Técnico' }})
+                </option>
+              </select>
+            </div>
+            <div v-if="erroresFormulario.idTecnico" class="invalid-feedback d-block">
+              {{ erroresFormulario.idTecnico }}
+            </div>
+            <div v-else class="form-text">
+              Especialista encargado del diagnóstico y reparación de este equipo.
             </div>
           </div>
         </div>

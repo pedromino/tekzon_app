@@ -1186,7 +1186,8 @@ const imprimirComprobante = () => {
 
                   <td>
                     <span class="d-block">{{ orden.equipo || '—' }}</span>
-                    <small v-if="orden.serie" class="text-muted-2">Serie {{ orden.serie }}</small>
+                    <small v-if="orden.serie" class="text-muted-2 d-block">Serie {{ orden.serie }}</small>
+                    <small class="text-muted-2 d-block"><i class="bi bi-person-gear"></i> {{ orden.tecnico }}</small>
                   </td>
 
                   <td style="max-width:240px;">

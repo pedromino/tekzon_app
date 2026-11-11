@@ -96,6 +96,19 @@ export default {
     }
   },
 
+  /**
+   * LISTA DE TÉCNICOS DISPONIBLES PARA ASIGNAR EN RECEPCIÓN.
+   */
+  async listarTecnicos() {
+    try {
+      const respuesta = await clienteApi.get('/ordenes-tecnicas/tecnicos');
+      return respuesta.data?.tecnicos || [];
+    } catch (error) {
+      console.error('Error al listar técnicos:', error);
+      return [];
+    }
+  },
+
   /* ======================================================================
    * RECEPCIÓN
    * ====================================================================== */
@@ -120,7 +133,8 @@ export default {
         marca: datosRecepcion.marca,
         modelo: datosRecepcion.modelo,
         numero_serie: datosRecepcion.serie,
-        // ---- Datos de la orden ----
+        // ---- Datos de la orden y técnico responsable ----
+        id_tecnico: datosRecepcion.idTecnico || datosRecepcion.id_tecnico,
         falla_reportada: datosRecepcion.falla,
         accesorios: datosRecepcion.accesorios,
         patron_desbloqueo: datosRecepcion.patron

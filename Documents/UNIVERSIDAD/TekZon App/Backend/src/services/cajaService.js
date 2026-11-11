@@ -34,32 +34,37 @@ const aDecimal = (valor) => {
 
 export const CajaService = {
   /** LISTA DE CAJAS con su recaudación (pantalla de Caja). */
-  async obtenerCajas() {
-    return await CajaModel.listarCajas();
+  async obtenerCajas(id_usuario = null) {
+    return await CajaModel.listarCajas(id_usuario);
   },
 
   /**
-   * CAJA ACTIVA (la que está abierta).
-   * Devuelve `null` cuando no hay ningún turno abierto: el frontend muestra el
-   * aviso "Debe abrir la caja del día" en lugar de un error.
+   * CAJA ACTIVA (la que está abierta para el usuario especificado o general).
+   * Devuelve `null` cuando no hay ningún turno abierto para ese usuario.
    */
-  async obtenerCajaActiva() {
-    return await CajaModel.obtenerCajaAbierta();
+  async obtenerCajaActiva(id_usuario = null) {
+    return await CajaModel.obtenerCajaAbierta(id_usuario);
   },
 
   /**
-   * ABRE UN TURNO DE CAJA.
+   * ABRE UN TURNO DE CAJA PERSONALIZADO PARA EL USUARIO AUTENTICADO.
    * @param {Object} datosApertura { monto_apertura, observaciones }
    * @param {Object} usuarioAutenticado Usuario responsable del turno.
    */
   async abrirCaja(datosApertura, usuarioAutenticado) {
-    // ---- Regla: no puede haber dos turnos abiertos simultáneamente ----
-    const cajaYaAbierta = await CajaModel.obtenerCajaAbierta();
+    const id_usuario = Number(usuarioAutenticado?.id_usuario);
+
+    if (!Number.isInteger(id_usuario) || id_usuario <= 0) {
+      throw new ErrorNegocio('No se pudo identificar al usuario que abre la caja.', 401);
+    }
+
+    // ---- Regla: este usuario no puede tener dos turnos abiertos simultáneamente ----
+    const cajaYaAbierta = await CajaModel.obtenerCajaAbierta(id_usuario);
 
     if (cajaYaAbierta) {
       throw new ErrorNegocio(
-        `Ya existe una caja abierta (id ${cajaYaAbierta.id_caja}, apertura `
-        + `${cajaYaAbierta.fecha_apertura}). Cierre ese turno antes de abrir uno nuevo.`,
+        `Ya tienes una caja abierta (Turno N° ${cajaYaAbierta.id_caja}, apertura `
+        + `${cajaYaAbierta.fecha_apertura}). Debes cerrar ese turno antes de abrir uno nuevo.`,
         409
       );
     }
@@ -73,12 +78,6 @@ export const CajaService = {
 
     if (monto_apertura < 0) {
       throw new ErrorNegocio('El monto de apertura no puede ser negativo.', 400);
-    }
-
-    const id_usuario = Number(usuarioAutenticado?.id_usuario);
-
-    if (!Number.isInteger(id_usuario) || id_usuario <= 0) {
-      throw new ErrorNegocio('No se pudo identificar al usuario que abre la caja.', 401);
     }
 
     const cajaAbierta = await CajaModel.abrirCaja({
