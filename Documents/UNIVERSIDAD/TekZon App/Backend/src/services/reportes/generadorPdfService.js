@@ -199,6 +199,8 @@ export const GeneradorPdfService = {
             width: colWidth,
             align,
             headerAlign: align === 'right' ? 'right' : (align === 'center' ? 'center' : 'left'),
+            headerColor: '#0c4a6e', // Color oscuro oficial de la marca desde styles.css (--brand-maroon)
+            headerOpacity: 1,
             renderer: null
           };
         });
@@ -222,37 +224,45 @@ export const GeneradorPdfService = {
         await doc.table(table, {
           x: doc.page.margins.left,
           width: anchoUtil,
-          prepareHeader: () => doc.font('Helvetica-Bold').fontSize(7).fillColor('#ffffff'),
+          // Encabezado: Fondo oscuro (#0c4a6e) y letra clara de alto contraste (#ffffff / --surface-card)
+          prepareHeader: () => doc.font('Helvetica-Bold').fontSize(7.5).fillColor('#ffffff'),
           prepareRow: (row, indexColumn, indexRow, rectRow, rectCell) => {
-            doc.font('Helvetica').fontSize(6.8).fillColor('#1e293b');
+            doc.font('Helvetica').fontSize(6.8).fillColor('#172b36'); // --text-main de styles.css
           },
           divider: {
             header: { disabled: false, width: 1, opacity: 1 },
             horizontal: { disabled: false, width: 0.5, opacity: 0.25 }
           },
-          padding: [3, 4, 3, 4],
-          headerColor: '#1e293b',
+          padding: [4, 4, 3, 4],
+          headerColor: '#0c4a6e',
           headerOpacity: 1
         });
 
         // ====================================================================
-        // 5. PIE DE PÁGINA "Página X de Y"
+        // 5. PIE DE PÁGINA "Página X de Y" (Garantizado en la misma hoja)
         // ====================================================================
         const range = doc.bufferedPageRange();
         for (let i = range.start; i < (range.start + range.count); i++) {
           doc.switchToPage(i);
 
-          const pieY = doc.page.height - 20;
+          // Se neutraliza temporalmente el margen inferior para evitar que PDFKit
+          // genere automáticamente una hoja en blanco innecesaria para el pie de página
+          const margenInferiorOriginal = doc.page.margins.bottom;
+          doc.page.margins.bottom = 0;
+
+          const pieY = doc.page.height - 18;
           doc
             .fontSize(6.8)
             .font('Helvetica')
-            .fillColor('#94a3b8')
+            .fillColor('#5d7079') // --text-muted de styles.css
             .text(
               `TekZon C.A. · Documento de Control y Toma de Decisiones · Página ${i + 1} de ${range.count}`,
               doc.page.margins.left,
               pieY,
-              { align: 'center', width: anchoUtil }
+              { align: 'center', width: anchoUtil, lineBreak: false }
             );
+
+          doc.page.margins.bottom = margenInferiorOriginal;
         }
 
         doc.end();

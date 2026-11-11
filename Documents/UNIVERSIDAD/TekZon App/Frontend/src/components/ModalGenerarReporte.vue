@@ -173,9 +173,9 @@ const procesarReporte = async () => {
             >
               {{ clasificacion.toUpperCase() }}
             </span>
-            <h5 class="modal-title fw-bold mb-0">
-              <i class="bi bi-file-earmark-bar-graph me-1"></i>
-              {{ titulo }}
+            <h5 class="modal-title mb-0" style="color: var(--surface-card, #ffffff) !important;">
+              <i class="bi bi-file-earmark-bar-graph me-1" style="color: var(--brand-aqua, #36c9b2) !important;"></i>
+              <span class="fw-bold" style="color: var(--surface-card, #ffffff) !important;">{{ titulo }}</span>
             </h5>
           </div>
           <button type="button" class="btn-close btn-close-white" :disabled="procesando" @click="cerrarModal(idModal)"></button>
@@ -477,5 +477,10 @@ const procesarReporte = async () => {
 <style scoped>
 .cursor-pointer {
   cursor: pointer;
+}
+
+.modal-header .modal-title,
+.modal-header .modal-title span {
+  color: var(--surface-card, #ffffff) !important;
 }
 </style>
